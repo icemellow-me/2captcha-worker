@@ -1,0 +1,174 @@
+# OpenBullet 2captcha Worker Config (.svb format)
+# Automates captcha solving via 2captcha worker cabinet + our solver fleet
+# Usage: Import into OpenBullet/Quantum, set CAPTCHA_KEY and SOLVER_KEY
+
+# ============================================================
+# BLOCK: Variable Setup
+# ============================================================
+# Set your 2captcha account key here
+SET VAR @KEY "ec63b74d6ee7848c14b01cc436c6eb21"
+# Our solver fleet API key (CaptchaPlugin key)
+SET VAR @SOLVER_KEY "8010000000ccojr5nrbg516w5jvw1wu9"
+# Universal solver endpoint
+SET VAR @SOLVER_URL "http://172.17.0.1:8855"
+# Turnstile solver endpoint
+SET VAR @TURNSTILE_URL "http://172.17.0.1:8878"
+# reCAPTCHA solver endpoint
+SET VAR @RECAPTCHA_URL "http://172.17.0.1:8866"
+# Cloudflare JSD solver endpoint
+SET VAR @JSD_URL "http://172.17.0.1:8191"
+# Counter for solved captchas
+SET VAR @SOLVED 0
+SET VAR @EARNINGS 0.0
+
+# ============================================================
+# BLOCK: Check Balance
+# ============================================================
+BLOCK:HttpRequest
+  url = "https://2captcha.com/res.php?key={{@KEY}}&action=getbalance&json=1"
+  method = GET
+  timeoutMilliseconds = 15000
+ENDBLOCK
+
+BLOCK:Parse
+  input = @data.SOURCE
+  jToken = "request"
+  MODE:Json
+  => VAR @BALANCE
+ENDBLOCK
+
+PRINT "💰 Current Balance: ${{@BALANCE}}"
+
+# ============================================================
+# BLOCK: Worker Loop — Get captchas from 2captcha
+# ============================================================
+LABEL:LOOP
+
+# Try to get a captcha to solve (worker endpoint via rucaptcha)
+BLOCK:HttpRequest
+  url = "https://rucaptcha.com/res.php?key={{@KEY}}&action=getcaptcha&json=1"
+  method = GET
+  timeoutMilliseconds = 15000
+ENDBLOCK
+
+BLOCK:Parse
+  input = @data.SOURCE
+  jToken = "request"
+  MODE:Json
+  => VAR @CAPTCHA_ID
+ENDBLOCK
+
+# Check if we got a captcha or error
+BLOCK:Parse
+  input = @data.SOURCE
+  jToken = "status"
+  MODE:Json
+  => VAR @CAPTCHA_STATUS
+ENDBLOCK
+
+IF @CAPTCHA_STATUS == 0
+  # No captcha available — wait and retry
+  DELAY 2000
+  JUMP:LOOP
+ENDIF
+
+# ============================================================
+# BLOCK: Route to Solver Based on Type
+# ============================================================
+
+# For image/base64 captcha — route to universal OCR solver
+BLOCK:HttpRequest
+  url = "{{@SOLVER_URL}}/in.php"
+  method = POST
+  timeoutMilliseconds = 30000
+  contentType = "application/x-www-form-urlencoded"
+  body = "key={{@SOLVER_KEY}}&method=base64&body={{@CAPTCHA_IMAGE}}"
+ENDBLOCK
+
+BLOCK:Parse
+  input = @data.SOURCE
+  prefix = "OK|"
+  MODE:String
+  => VAR @TASK_ID
+ENDBLOCK
+
+# ============================================================
+# BLOCK: Poll for Result
+# ============================================================
+LABEL:POLL
+
+DELAY 1000
+
+BLOCK:HttpRequest
+  url = "{{@SOLVER_URL}}/res.php?key={{@SOLVER_KEY}}&id={{@TASK_ID}}"
+  method = GET
+  timeoutMilliseconds = 10000
+ENDBLOCK
+
+IF @data.SOURCE == "CAPCHA_NOT_READY"
+  JUMP:POLL
+ENDIF
+
+# Extract the answer
+BLOCK:Parse
+  input = @data.SOURCE
+  prefix = "OK|"
+  MODE:String
+  => VAR @ANSWER
+ENDBLOCK
+
+# ============================================================
+# BLOCK: Submit Answer to 2captcha
+# ============================================================
+BLOCK:HttpRequest
+  url = "https://rucaptcha.com/res.php"
+  method = POST
+  timeoutMilliseconds = 15000
+  contentType = "application/x-www-form-urlencoded"
+  body = "key={{@KEY}}&action=answer&id={{@CAPTCHA_ID}}&answer={{@ANSWER}}"
+ENDBLOCK
+
+# Increment counters
+SET VAR @SOLVED {{@SOLVED}} + 1
+SET VAR @EARNINGS {{@EARNINGS}} + 0.0005
+
+PRINT "✅ Solved #{{@SOLVED}} (ID: {{@CAPTCHA_ID}}) — +$0.000"
+PRINT "📊 Total: {{@SOLVED}} solved, ${{@EARNINGS}} earned"
+
+# Loop back for next captcha
+JUMP:LOOP
+
+# ============================================================
+# BLOCK: reCAPTCHA v2 Variant
+# ============================================================
+# Uncomment to use reCAPTCHA solver instead
+# BLOCK:HttpRequest
+#   url = "{{@RECAPTCHA_URL}}/in.php"
+#   method = POST
+#   body = "key={{@SOLVER_KEY}}&method=userrecaptcha&googlekey=SITEKEY&pageurl=PAGEURL"
+# ENDBLOCK
+
+# ============================================================
+# BLOCK: Turnstile Variant
+# ============================================================
+# BLOCK:HttpRequest
+#   url = "{{@TURNSTILE_URL}}/in.php"
+#   method = POST
+#   body = "key={{@SOLVER_KEY}}&method=turnstile&sitekey=SITEKEY&pageurl=PAGEURL"
+# ENDBLOCK
+
+# ============================================================
+# BLOCK: Cloudflare JSD Variant
+# ============================================================
+# BLOCK:HttpRequest
+#   url = "{{@JSD_URL}}/solve"
+#   method = POST
+#   contentType = "application/json"
+#   body = '{"url":"TARGET_URL"}'
+# ENDBLOCK
+# BLOCK:Parse
+#   input = @data.SOURCE
+#   jToken = "cf_clearance"
+#   MODE:Json
+#   => VAR @CF_TOKEN
+# ENDBLOCK

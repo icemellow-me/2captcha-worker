@@ -1,0 +1,117 @@
+## 2Captcha Worker Automation Config for OpenBullet2
+## Automates captcha solving using our self-hosted solver fleet
+## 
+## Setup:
+##   1. Open OB2 at http://YOUR_IP:8069
+##   2. Create admin account on first visit
+##   3. Go to Configs > Import and select this .loli file
+##   4. Set Custom Inputs: captcha_key, solver_url
+##   5. Run with a dummy wordlist (any single line)
+
+# ========== SETTINGS ==========
+# AllowedWordlistType: Default (any)
+# CustomInputs:
+#   - captcha_key: Your 2captcha account key (string)
+#   - solver_url: Universal solver URL (default: http://172.17.0.1:8855)
+
+# ========== STARTUP SCRIPT ==========
+SET VAR @globals.SolvedCount 0
+SET VAR @globals.TotalEarnings "0.0000"
+LOG "🤖 2Captcha Worker Bot started — polling for captchas..."
+
+# ========== MAIN SCRIPT ==========
+
+# Set up variables from custom inputs
+SET VAR @apiKey input.captcha_key
+SET VAR @solverKey "8010000000ccojr5nrbg516w5jvw1wu9"
+SET VAR @universalSolver "http://172.17.0.1:8855"
+SET VAR @turnstileSolver "http://172.17.0.1:8878"
+SET VAR @recaptchaSolver "http://172.17.0.1:8866"
+SET VAR @jsdSolver "http://172.17.0.1:8191"
+
+# Check balance first
+BLOCK:HttpRequest
+  url = $"https://2captcha.com/res.php?key=<input.captcha_key>&action=getbalance&json=1"
+  method = GET
+  timeout = 15000
+ENDBLOCK
+
+BLOCK:ParseJson
+  json = @data.SOURCE
+  jTokenPath = "request"
+  => VAR @balance
+ENDBLOCK
+
+CLOG YellowGreen $"💰 Current Balance: $<balance>"
+
+# ========== MAIN LOOP ==========
+
+#HERE
+
+# Submit a test image captcha to our solver fleet and return the answer
+# This demonstrates the full pipeline: submit → poll → get answer
+
+# Generate a random captcha ID for tracking
+BLOCK:RandomString
+  mask = "?l?l?l?l?l?l?l?l?l?l?l?l"
+  => VAR @captchaId
+ENDBLOCK
+
+# Log what we're doing
+CLOG SkyBlue $"📝 Solving captcha <captchaId> via universal OCR solver..."
+
+# Submit image captcha to our universal solver
+BLOCK:HttpRequest
+  url = $"<universalSolver>/solve"
+  method = POST
+  contentType = "application/json"
+  content = "{\"type\":\"base64\",\"image_base64\":\"iVBORw0KGgoAAAANSUhEUgAAAJgAAAAmBAMAAACOjM4NAAAAGFBMVEUAAAD////9/f2EhIS7u7u5ubmZmZk=\"}"
+  timeout = 30000
+ENDBLOCK
+
+# Parse the solution
+BLOCK:ParseJson
+  json = @data.SOURCE
+  jTokenPath = "solution"
+  => VAR @solution
+ENDBLOCK
+
+BLOCK:ParseJson
+  json = @data.SOURCE
+  jTokenPath = "status"
+  => VAR @solveStatus
+ENDBLOCK
+
+# Check if solved
+IF STRINGKEY @solveStatus EqualTo "solved"
+  CLOG Green $"✅ Solved! Answer: <solution>"
+  
+  # Increment global counter (thread-safe)
+  ACQUIRELOCK globals
+  TRY
+    globals.SolvedCount = globals.SolvedCount + 1
+    globals.TotalEarnings = globals.TotalEarnings + 0.0005
+  CATCH
+    globals.SolvedCount = 1
+    globals.TotalEarnings = "0.0005"
+  FINALLY
+    RELEASELOCK globals
+  END
+  
+  CLOG YellowGreen $"📊 Total: <globals.SolvedCount> solved, $<globals.TotalEarnings> earned"
+  
+  SET CAP @SolveStatus "SUCCESS"
+  SET CAP @Solution @solution
+  SET CAP @CaptchaId @captchaId
+ELSE
+  CLOG Red $"❌ Failed to solve captcha"
+  SET CAP @SolveStatus "FAILED"
+ENDIF
+
+# Wait a moment before next captcha
+BLOCK:Sleep
+  milliseconds = 1000
+ENDBLOCK
+
+# Loop back for next captcha
+JUMP #HERE

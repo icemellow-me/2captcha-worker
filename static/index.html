@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2Captcha Worker — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0f172a;--card:rgba(30,41,59,.6);--border:rgba(148,163,184,.15);
+--text:#e2e8f0;--muted:#64748b;--green:#22c55e;--cyan:#06b6d4;--red:#ef4444;
+--yellow:#eab300;--purple:#a855f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
+overflow-x:hidden}
+.bg-glow{position:fixed;inset:0;pointer-events:none;z-index:-1}
+.bg-glow::before{content:'';position:absolute;width:800px;height:800px;border-radius:50%;
+background:radial-gradient(circle,rgba(34,197,94,.06) 0%,transparent 70%);
+top:-300px;right:-200px}
+.bg-glow::after{content:'';position:absolute;width:600px;height:600px;border-radius:50%;
+background:radial-gradient(circle,rgba(6,182,212,.06) 0%,transparent 70%);
+bottom:-200px;left:-200px}
+/* Nav */
+nav{background:rgba(15,23,42,.8);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);
+padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--green),var(--cyan));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.nav-links{display:flex;gap:24px;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:14px;transition:color .2s;cursor:pointer}
+.nav-links a:hover{color:var(--text)}
+.btn-sm{padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:transparent;
+color:var(--text);font-size:13px;cursor:pointer;transition:all .2s}
+.btn-sm:hover{background:rgba(148,163,184,.1)}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.running{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+.status-dot.stopped{background:var(--red);opacity:.5}
+.status-dot.idle{background:var(--yellow);opacity:.7}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* Main */
+main{max-width:1400px;margin:0 auto;padding:24px 32px}
+/* Stat cards */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--border);
+border-radius:16px;padding:24px;position:relative;overflow:hidden;transition:transform .2s}
+.stat-card:hover{transform:translateY(-2px)}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+background:linear-gradient(90deg,transparent,var(--accent,var(--green)),transparent)}
+.stat-label{font-size:13px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.stat-value{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.stat-icon{position:absolute;top:20px;right:20px;font-size:32px;opacity:.15}
+/* Sections */
+.section{background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--border);
+border-radius:16px;padding:24px;margin-bottom:24px}
+.section-title{font-size:16px;font-weight:600;margin-bottom:20px;display:flex;align-items:center;
+justify-content:space-between}
+/* Charts */
+.chart-container{position:relative;height:200px;width:100%}
+/* Table */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:12px 16px;font-size:12px;color:var(--muted);text-transform:uppercase;
+border-bottom:1px solid var(--border);font-weight:600}
+td{padding:12px 16px;font-size:14px;border-bottom:1px solid rgba(148,163,184,.08)}
+tr:hover{background:rgba(148,163,184,.03)}
+.badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;display:inline-block}
+.badge.solved{background:rgba(34,197,94,.15);color:var(--green)}
+.badge.failed{background:rgba(239,68,68,.15);color:var(--red)}
+.badge.processing{background:rgba(234,179,0,.15);color:var(--yellow)}
+/* Grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:768px){.grid-2{grid-template-columns:1fr}}
+/* Solver status */
+.solver-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.solver-card{background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:10px;
+padding:14px;transition:all .2s}
+.solver-card.ok{border-color:rgba(34,197,94,.3)}
+.solver-card.offline{border-color:rgba(239,68,68,.2);opacity:.6}
+.solver-name{font-size:13px;font-weight:600;margin-bottom:4px}
+.solver-status{font-size:11px;color:var(--muted)}
+.solver-card.ok .solver-status{color:var(--green)}
+.solver-card.offline .solver-status{color:var(--red)}
+/* Withdraw */
+.withdraw-box{text-align:center;padding:32px}
+.withdraw-amount{font-size:36px;font-weight:700;margin:16px 0}
+.btn-withdraw{padding:12px 32px;border-radius:10px;border:none;font-size:16px;font-weight:600;
+cursor:pointer;background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;transition:all .2s}
+.btn-withdraw:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(34,197,94,.3)}
+.btn-withdraw:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+/* Settings */
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;
+border-bottom:1px solid rgba(148,163,184,.08)}
+.setting-row:last-child{border-bottom:none}
+.setting-label{font-size:14px;font-weight:500}
+.setting-input{padding:8px 12px;background:rgba(15,23,42,.8);border:1px solid var(--border);
+border-radius:8px;color:var(--text);font-size:14px;width:300px}
+.setting-input:focus{outline:none;border-color:var(--green)}
+/* Timer */
+.timer{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* Responsive */
+@media(max-width:640px){
+main{padding:16px}
+.stats-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<!-- Nav -->
+<nav>
+<div class="logo">🤖 2Captcha Worker</div>
+<div class="nav-links">
+<span><span class="status-dot" id="statusDot"></span><span id="statusText">Idle</span></span>
+<a onclick="loadPage('dashboard')">Dashboard</a>
+<a onclick="loadPage('solvers')">Solvers</a>
+<a onclick="loadPage('withdraw')">Withdraw</a>
+<a onclick="loadPage('settings')">Settings</a>
+<a href="/logout" style="color:var(--red)">Logout</a>
+</div>
+</nav>
+
+<!-- Main content -->
+<div id="content"></div>
+
+<script>
+let charts = {};
+let pollInterval = null;
+let currentPage = 'dashboard';
+
+// ─── Page Loader ──────────────────────────────────
+
+async function loadPage(page) {
+    currentPage = page;
+    const content = document.getElementById('content');
+    if (page === 'dashboard') content.innerHTML = dashboardHTML();
+    else if (page === 'solvers') content.innerHTML = solversHTML();
+    else if (page === 'withdraw') content.innerHTML = withdrawHTML();
+    else if (page === 'settings') content.innerHTML = settingsHTML();
+    
+    if (page === 'dashboard') {
+        await fetchStats();
+        await fetchBalance();
+        pollInterval = setInterval(async () => {
+            await fetchStats();
+            await fetchBalance();
+        }, 5000);
+    } else {
+        clearInterval(pollInterval);
+    }
+    
+    if (page === 'solvers') fetchSolverHealth();
+    if (page === 'withdraw') fetchBalance();
+    if (page === 'settings') fetchSettings();
+}
+
+// ─── Dashboard page ───────────────────────────────
+
+function dashboardHTML() {
+    return `
+    <main>
+    <div class="stats-grid">
+        <div class="stat-card" style="--accent:var(--green)">
+            <div class="stat-label">💰 Earnings Today</div>
+            <div class="stat-value" id="earningsToday" style="color:var(--green)">$0.0000</div>
+            <div class="stat-sub" id="solvedToday">0 captchas solved</div>
+            <div class="stat-icon">💵</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--cyan)">
+            <div class="stat-label">🏦 Total Balance</div>
+            <div class="stat-value" id="totalBalance" style="color:var(--cyan)">$0.00</div>
+            <div class="stat-sub" id="balanceSource">Loading...</div>
+            <div class="stat-icon">🏦</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--yellow)">
+            <div class="stat-label">✅ Total Solved</div>
+            <div class="stat-value" id="totalSolved">0</div>
+            <div class="stat-sub" id="successRate">0% success rate</div>
+            <div class="stat-icon">✅</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--purple)">
+            <div class="stat-label">⚡ Avg Solve Time</div>
+            <div class="stat-value" id="avgSolveTime">0ms</div>
+            <div class="stat-sub" id="totalEarnings">Total: $0.0000</div>
+            <div class="stat-icon">⚡</div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="section">
+            <div class="section-title">📈 Earnings (24h)</div>
+            <div class="chart-container"><canvas id="earningsChart"></canvas></div>
+        </div>
+        <div class="section">
+            <div class="section-title">🎯 Captchas by Type</div>
+            <div class="chart-container"><canvas id="typeChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">📋 Recent Activity</div>
+        <table>
+            <thead><tr><th>Captcha ID</th><th>Type</th><th>Status</th><th>Reward</th><th>Solve Time</th><th>Time</th></tr></thead>
+            <tbody id="recentTable"><tr><td colspan="6" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+        </table>
+    </div>
+
+    <div style="text-align:center;padding:16px">
+        <button class="btn-sm" onclick="toggleWorker()" id="toggleBtn">▶ Start Worker</button>
+    </div>
+    </main>`;
+}
+
+// ─── Fetch stats ───────────────────────────────────
+
+async function fetchStats() {
+    try {
+        const resp = await fetch('/api/stats');
+        if (resp.status === 401) { window.location = '/login'; return; }
+        const data = await resp.json();
+        
+        // Update cards
+        document.getElementById('earningsToday').textContent = '$' + (data.earnings_today || 0).toFixed(4);
+        document.getElementById('solvedToday').textContent = (data.solved_today || 0) + ' captchas solved';
+        document.getElementById('totalSolved').textContent = data.total_solved || 0;
+        document.getElementById('successRate').textContent = (data.success_rate || 0) + '% success rate';
+        document.getElementById('avgSolveTime').textContent = (data.avg_solve_ms || 0) + 'ms';
+        document.getElementById('totalEarnings').textContent = 'Total: $' + (data.total_earnings || 0).toFixed(4);
+        document.getElementById('totalBalance').textContent = '$' + (data.balance || 0).toFixed(4);
+        document.getElementById('balanceSource').textContent = data.running ? 'Worker running' : 'Worker stopped';
+        
+        // Status indicator
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        const btn = document.getElementById('toggleBtn');
+        if (data.running) {
+            dot.className = 'status-dot running';
+            text.textContent = 'Running';
+            if (btn) btn.textContent = '⏹ Stop Worker';
+        } else {
+            dot.className = 'status-dot stopped';
+            text.textContent = 'Stopped';
+            if (btn) btn.textContent = '▶ Start Worker';
+        }
+        
+        // Recent activity
+        if (data.recent && data.recent.length > 0) {
+            const tbody = document.getElementById('recentTable');
+            if (tbody) {
+                tbody.innerHTML = data.recent.map(r => `
+                    <tr>
+                        <td style="font-family:monospace;font-size:12px">${r.captcha_id || '—'}</td>
+                        <td>${r.captcha_type || '—'}</td>
+                        <td><span class="badge ${r.status}">${r.status}</span></td>
+                        <td style="color:var(--green)">$${(r.reward || 0).toFixed(6)}</td>
+                        <td>${(r.solve_ms || 0) > 0 ? r.solve_ms + 'ms' : '—'}</td>
+                        <td style="font-size:12px;color:var(--muted)">${r.solved_at || '—'}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // Update charts
+        if (data.hourly && data.hourly.length > 0) {
+            updateEarningsChart(data.hourly);
+        }
+        if (data.by_type) {
+            updateTypeChart(data.by_type);
+        }
+    } catch (e) { console.error('Stats error:', e); }
+}
+
+async function fetchBalance() {
+    try {
+        const resp = await fetch('/api/balance');
+        const data = await resp.json();
+        const el = document.getElementById('totalBalance');
+        if (el) { el.textContent = '$' + (data.balance || 0).toFixed(4); }
+        const src = document.getElementById('balanceSource');
+        if (src) { src.textContent = data.balance_source === 'live' ? 'Live from 2captcha' : 'Cached value'; }
+    } catch (e) {}
+}
+
+// ─── Charts ────────────────────────────────────────
+
+function updateEarningsChart(hourly) {
+    const ctx = document.getElementById('earningsChart');
+    if (!ctx) return;
+    const labels = hourly.map(h => h.hour + ':00');
+    const data = hourly.map(h => parseFloat(h.earnings).toFixed(4));
+    
+    if (charts.earnings) charts.earnings.destroy();
+    charts.earnings = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{
+            label: 'Earnings ($)', data, borderColor: '#22c55e',
+            backgroundColor: 'rgba(34,197,94,.1)', fill: true, tension: 0.4
+        }]},
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { display: false }, y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(148,163,184,.05)' } } } }
+    });
+}
+
+function updateTypeChart(byType) {
+    const ctx = document.getElementById('typeChart');
+    if (!ctx) return;
+    const labels = Object.keys(byType);
+    const data = labels.map(k => byType[k].count);
+    if (data.length === 0) return;
+    
+    if (charts.type) charts.type.destroy();
+    charts.type = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{
+            data,
+            backgroundColor: ['#22c55e','#06b6d4','#eab300','#a855f7','#ef4444','#f97316','#3b82f6','#ec4899']
+        }]},
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } } } }
+    });
+}
+
+// ─── Solvers page ──────────────────────────────────
+
+function solversHTML() {
+    return `
+    <main>
+    <div class="section">
+        <div class="section-title">🔧 Solver Fleet Health</div>
+        <div class="solver-grid" id="solverGrid">
+            <div class="solver-card" style="text-align:center;color:var(--muted)">Checking...</div>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-title">⚡ Speed Benchmarks</div>
+        <table>
+            <thead><tr><th>Solver</th><th>Port</th><th>Type</th><th>Best Time</th><th>Status</th></tr></thead>
+            <tbody>
+                <tr><td>Universal OCR (ddddocr + Tesseract)</td><td>8855</td><td>Image/Base64</td><td>~1,100ms</td><td>✅ Running (3 weeks)</td></tr>
+                <tr><td>Turnstile Solver v2 (nodriver + camoufox)</td><td>8878</td><td>Cloudflare Turnstile</td><td>~8,200ms</td><td>✅ Running (3 weeks)</td></tr>
+                <tr><td>reCAPTCHA v2 (Playwright + CaptchaPlugin)</td><td>8866</td><td>reCAPTCHA v2</td><td>~2,200ms</td><td>✅ Running (4 weeks)</td></tr>
+                <tr><td>Cloudflare JSD (Go/Fiber)</td><td>8191</td><td>JSD Challenges</td><td>~65ms</td><td>✅ Running (new)</td></tr>
+                <tr><td>xCaptcha Solver</td><td>internal</td><td>xCaptcha</td><td>—</td><td>✅ Running (4 weeks)</td></tr>
+                <tr><td>Extension Universal (json=1)</td><td>8844</td><td>All types</td><td>—</td><td>✅ Running (3 weeks)</td></tr>
+                <tr><td>Extension reCAPTCHA (json=1)</td><td>8833</td><td>reCAPTCHA v2</td><td>—</td><td>✅ Running (4 weeks)</td></tr>
+                <tr><td>Extension Turnstile (json=1)</td><td>8822</td><td>Turnstile</td><td>—</td><td>✅ Running (3 weeks)</td></tr>
+            </tbody>
+        </table>
+    </div>
+    </main>`;
+}
+
+async function fetchSolverHealth() {
+    try {
+        const resp = await fetch('/api/solver-health');
+        const data = await resp.json();
+        const grid = document.getElementById('solverGrid');
+        if (!grid) return;
+        
+        const icons = { universal_ocr: '🔤', turnstile: '🛡️', recaptcha_v2: '🔐', cloudflare_jsd: '☁️' };
+        const names = { universal_ocr: 'Universal OCR', turnstile: 'Turnstile v2', recaptcha_v2: 'reCAPTCHA v2', cloudflare_jsd: 'Cloudflare JSD' };
+        
+        grid.innerHTML = Object.entries(data).map(([key, info]) => {
+            const isOk = info.status === 'ok';
+            return `<div class="solver-card ${isOk ? 'ok' : 'offline'}">
+                <div class="solver-name">${icons[key] || '🔧'} ${names[key] || key}</div>
+                <div class="solver-status">${isOk ? '● Online' : '● Offline'}</div>
+                ${info.details && info.details.solved !== undefined ? `<div class="solver-status" style="margin-top:4px">Solved: ${info.details.solved} | Active: ${info.details.active || 0}</div>` : ''}
+                ${info.error ? `<div class="solver-status" style="color:var(--red);font-size:10px;margin-top:4px">${info.error}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (e) { console.error(e); }
+}
+
+// ─── Withdraw page ─────────────────────────────────
+
+function withdrawHTML() {
+    return `
+    <main>
+    <div class="section withdraw-box">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px">💸 Withdraw Earnings</div>
+        <div style="color:var(--muted);font-size:14px;margin-bottom:24px">Request a payout from your 2captcha worker balance</div>
+        <div class="withdraw-amount" id="withdrawBalance" style="color:var(--green)">$0.00</div>
+        <div style="color:var(--muted);font-size:13px;margin-bottom:24px" id="withdrawInfo">Fetching balance...</div>
+        <button class="btn-withdraw" id="withdrawBtn" onclick="requestWithdraw()" disabled>Request Withdrawal</button>
+        <div id="withdrawResult" style="margin-top:20px;display:none"></div>
+    </div>
+    </main>`;
+}
+
+async function requestWithdraw() {
+    const btn = document.getElementById('withdrawBtn');
+    const result = document.getElementById('withdrawResult');
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    
+    try {
+        const resp = await fetch('/api/withdraw', { method: 'POST' });
+        const data = await resp.json();
+        
+        result.style.display = 'block';
+        if (data.error) {
+            result.innerHTML = `<div style="color:var(--red);padding:16px;background:rgba(239,68,68,.1);border-radius:10px">❌ ${data.error}</div>`;
+        } else {
+            result.innerHTML = `<div style="color:var(--green);padding:16px;background:rgba(34,197,94,.1);border-radius:10px">
+                ✅ Withdrawal requested!<br>
+                <span style="font-size:13px">Amount: $${(data.amount || 0).toFixed(4)} | ID: ${data.withdraw_id} | Status: ${data.status}</span>
+            </div>`;
+        }
+    } catch (e) {
+        result.style.display = 'block';
+        result.innerHTML = `<div style="color:var(--red)">Error: ${e.message}</div>`;
+    }
+    
+    btn.disabled = false;
+    btn.textContent = 'Request Withdrawal';
+    await fetchBalance();
+}
+
+// ─── Settings page ─────────────────────────────────
+
+function settingsHTML() {
+    return `
+    <main>
+    <div class="section" style="max-width:600px">
+        <div class="section-title">⚙️ Worker Settings</div>
+        <div id="settingsContent"><div style="text-align:center;color:var(--muted)">Loading settings...</div></div>
+    </div>
+    </main>`;
+}
+
+async function fetchSettings() {
+    try {
+        const resp = await fetch('/api/settings');
+        const data = await resp.json();
+        const content = document.getElementById('settingsContent');
+        if (!content) return;
+        
+        content.innerHTML = `
+            <div class="setting-row">
+                <div class="setting-label">2Captcha API Key</div>
+                <input class="setting-input" id="setKey" value="${data.captcha_key_full || ''}" placeholder="32-char key">
+            </div>
+            <div class="setting-row">
+                <div class="setting-label">Poll Interval (sec)</div>
+                <input class="setting-input" id="setInterval" value="${data.poll_interval || '1.0'}" type="number" step="0.5">
+            </div>
+            <div class="setting-row"><div class="setting-label">Universal OCR Solver</div><div style="color:var(--muted)">${data.solver_universal}</div></div>
+            <div class="setting-row"><div class="setting-label">Turnstile Solver</div><div style="color:var(--muted)">${data.solver_turnstile}</div></div>
+            <div class="setting-row"><div class="setting-label">reCAPTCHA Solver</div><div style="color:var(--muted)">${data.solver_recaptcha}</div></div>
+            <div class="setting-row"><div class="setting-label">Cloudflare JSD Solver</div><div style="color:var(--muted)">${data.solver_jsd}</div></div>
+            <div style="margin-top:20px;text-align:right">
+                <button class="btn-sm" onclick="saveSettings()">Save Settings</button>
+            </div>
+        `;
+    } catch (e) { console.error(e); }
+}
+
+async function saveSettings() {
+    const key = document.getElementById('setKey').value;
+    const interval = document.getElementById('setInterval').value;
+    try {
+        await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ captcha_key: key, poll_interval: interval })
+        });
+        alert('Settings saved!');
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ─── Worker toggle ─────────────────────────────────
+
+async function toggleWorker() {
+    const btn = document.getElementById('toggleBtn');
+    const dot = document.getElementById('statusDot');
+    if (dot.className.includes('running')) {
+        await fetch('/api/stop', { method: 'POST' });
+        btn.textContent = '▶ Start Worker';
+        dot.className = 'status-dot stopped';
+        document.getElementById('statusText').textContent = 'Stopped';
+    } else {
+        await fetch('/api/start', { method: 'POST' });
+        btn.textContent = '⏹ Stop Worker';
+        dot.className = 'status-dot running';
+        document.getElementById('statusText').textContent = 'Running';
+    }
+}
+
+// ─── Init ──────────────────────────────────────────
+
+loadPage('dashboard');
+</script>
+</body>
+</html>

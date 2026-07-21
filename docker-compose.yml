@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  worker-dashboard:
+    build: .
+    container_name: 2captcha-worker
+    ports:
+      - "8890:8890"
+    environment:
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-admin}
+      DASHBOARD_PORT: "8890"
+      CAPTCHA_KEY: ${CAPTCHA_KEY:-ec63b74d6ee7848c14b01cc436c6eb21}
+      SOLVER_UNIVERSAL: http://172.17.0.1:8855
+      SOLVER_TURNSTILE: http://172.17.0.1:8878
+      SOLVER_RECAPTCHA: http://172.17.0.1:8866
+      POLL_INTERVAL: "1.0"
+    restart: unless-stopped
+    volumes:
+      - worker-data:/app/data
+
+volumes:
+  worker-data:
