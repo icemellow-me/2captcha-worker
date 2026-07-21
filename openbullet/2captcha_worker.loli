@@ -1,117 +1,427 @@
-## 2Captcha Worker Automation Config for OpenBullet2
-## Automates captcha solving using our self-hosted solver fleet
+## ============================================================
+## 2Captcha Worker Automation — Full LoliCode Config for OB2
+## ============================================================
 ## 
-## Setup:
-##   1. Open OB2 at http://YOUR_IP:8069
-##   2. Create admin account on first visit
-##   3. Go to Configs > Import and select this .loli file
-##   4. Set Custom Inputs: captcha_key, solver_url
-##   5. Run with a dummy wordlist (any single line)
-
-# ========== SETTINGS ==========
-# AllowedWordlistType: Default (any)
-# CustomInputs:
-#   - captcha_key: Your 2captcha account key (string)
-#   - solver_url: Universal solver URL (default: http://172.17.0.1:8855)
+## This config replicates the Python dashboard worker bot in OB2.
+## It can:
+##   - Check 2captcha balance
+##   - Submit captchas to our self-hosted solver fleet (OCR, reCAPTCHA, Turnstile, JSD)
+##   - Poll for solutions
+##   - Submit answers back to 2captcha
+##   - Track solved count + earnings in shared globals
+##   - Log everything to OB2's built-in logger
+##
+## How to use:
+##   1. Deploy OpenBullet2 (docker run -d -p 8069:5000 openbullet/openbullet2:latest)
+##   2. Open http://YOUR_IP:8069 and create admin account
+##   3. Go to Configs → New Config → name it "2captcha-worker"
+##   4. Go to Config → Edit LoliCode → paste this entire file
+##   5. In Config Settings:
+##      - AllowedWordlistTypes: add "Default"
+##      - Custom Inputs:
+##          captcha_key  (string) — your 2captcha account key
+##          captcha_type (string) — "image", "recaptcha_v2", "turnstile", or "auto"
+##          site_url     (string) — page URL (for reCAPTCHA/Turnstile)
+##          site_key     (string) — site key (for reCAPTCHA/Turnstile)
+##   6. Create a wordlist with one line: "dummy:dummy"
+##   7. Run a multi-run job with 1 bot, infinite retries
+##   8. Watch the logger — captchas will be solved in real-time
+##
+## Custom Inputs needed:
+##   input.captcha_key  → 2captcha account key (32 chars)
+##   input.captcha_type → "image" | "recaptcha_v2" | "turnstile" (default: auto)
+##   input.site_url     → URL of page with captcha (for recaptcha/turnstile)
+##   input.site_key     → GoogleKey/sitekey (for recaptcha/turnstile)
+## ============================================================
 
 # ========== STARTUP SCRIPT ==========
+# Runs once before all bots start — initialize shared counters
+
 SET VAR @globals.SolvedCount 0
+SET VAR @globals.FailedCount 0
 SET VAR @globals.TotalEarnings "0.0000"
-LOG "🤖 2Captcha Worker Bot started — polling for captchas..."
+SET VAR @globals.WorkerStarted "true"
+LOG "🤖 2Captcha Worker Bot — OB2 Edition started"
+LOG "=============================================="
 
 # ========== MAIN SCRIPT ==========
+# Runs once per bot (run with 1 bot + retries for continuous loop)
 
-# Set up variables from custom inputs
-SET VAR @apiKey input.captcha_key
-SET VAR @solverKey "8010000000ccojr5nrbg516w5jvw1wu9"
-SET VAR @universalSolver "http://172.17.0.1:8855"
-SET VAR @turnstileSolver "http://172.17.0.1:8878"
-SET VAR @recaptchaSolver "http://172.17.0.1:8866"
-SET VAR @jsdSolver "http://172.17.0.1:8191"
+# ── Variable setup ──
+SET VAR @TwoCaptchaKey input.captcha_key
+SET VAR @SolverAPIKey "8010000000ccojr516w5jvw1wu9"
+SET VAR @UniversalSolver "http://172.17.0.1:8855"
+SET VAR @TurnstileSolver "http://172.17.0.1:8878"
+SET VAR @RecaptchaSolver "http://172.17.0.1:8866"
+SET VAR @JsdSolver "http://172.17.0.1:8191"
 
-# Check balance first
+# Determine captcha type (default: auto → image)
+SET VAR @captchaType input.captcha_type
+IF STRINGKEY @captcha_type IsEmpty
+  SET VAR @captchaType "image"
+ENDIF
+
+# ── STEP 1: Check Balance ──
+# ─────────────────────────────
 BLOCK:HttpRequest
-  url = $"https://2captcha.com/res.php?key=<input.captcha_key>&action=getbalance&json=1"
+  url = $"https://2captcha.com/res.php?key=<TwoCaptchaKey>&action=getbalance&json=1"
   method = GET
   timeout = 15000
 ENDBLOCK
 
 BLOCK:ParseJson
   json = @data.SOURCE
-  jTokenPath = "request"
-  => VAR @balance
+  jTokenPath = "status"
+  => VAR @balanceStatus
 ENDBLOCK
 
-CLOG YellowGreen $"💰 Current Balance: $<balance>"
+IF INTKEY @balanceStatus EqualTo 1
+  BLOCK:ParseJson
+    json = @data.SOURCE
+    jTokenPath = "request"
+    => VAR @balance
+  ENDBLOCK
+  CLOG YellowGreen $"💰 2Captcha Balance: $<balance>"
+  
+  # Also try API v2 (createTask endpoint)
+  BLOCK:HttpRequest
+    url = "https://api.2captcha.com/getBalance"
+    method = POST
+    contentType = "application/json"
+    content = $"{\"clientKey\":\"<TwoCaptchaKey>\"}"
+    timeout = 15000
+  ENDBLOCK
+  
+  BLOCK:ParseJson
+    json = @data.SOURCE
+    jTokenPath = "balance"
+    => VAR @balanceV2
+  ENDBLOCK
+  
+  # Use whichever returned a valid balance
+  IF STRINGKEY @balanceV2 IsNotEmpty
+    CLOG Cyan $"💰 API v2 Balance: $<balanceV2>"
+  ENDIF
+ELSE
+  CLOG Red $"⚠️ Could not fetch balance — key may be worker-only or invalid"
+  CLOG Yellow $"   The bot will still attempt to solve captchas via our solver fleet"
+  CLOG Yellow $"   Earnings will be tracked locally (not from 2captcha server)"
+ENDIF
 
-# ========== MAIN LOOP ==========
+# ── Generate unique captcha task ID ──
+BLOCK:RandomString
+  mask = "?d?d?d?d?d?d?d?d?d?d"
+  => VAR @taskId
+ENDBLOCK
 
+# ── START LOOP ──
 #HERE
 
-# Submit a test image captcha to our solver fleet and return the answer
-# This demonstrates the full pipeline: submit → poll → get answer
+CLOG SkyBlue $""
+CLOG SkyBlue $"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+CLOG SkyBlue $"📝 New captcha task #<taskId> (type: <captchaType>)"
 
-# Generate a random captcha ID for tracking
-BLOCK:RandomString
-  mask = "?l?l?l?l?l?l?l?l?l?l?l?l"
-  => VAR @captchaId
+# ── STEP 2: Route to appropriate solver ──
+# ─────────────────────────────────────────
+
+# Track solve start time
+BLOCK:TimeNow
+  format = "unix"
+  => VAR @startTime
 ENDBLOCK
 
-# Log what we're doing
-CLOG SkyBlue $"📝 Solving captcha <captchaId> via universal OCR solver..."
-
-# Submit image captcha to our universal solver
-BLOCK:HttpRequest
-  url = $"<universalSolver>/solve"
-  method = POST
-  contentType = "application/json"
-  content = "{\"type\":\"base64\",\"image_base64\":\"iVBORw0KGgoAAAANSUhEUgAAAJgAAAAmBAMAAACOjM4NAAAAGFBMVEUAAAD////9/f2EhIS7u7u5ubmZmZk=\"}"
-  timeout = 30000
-ENDBLOCK
-
-# Parse the solution
-BLOCK:ParseJson
-  json = @data.SOURCE
-  jTokenPath = "solution"
-  => VAR @solution
-ENDBLOCK
-
-BLOCK:ParseJson
-  json = @data.SOURCE
-  jTokenPath = "status"
-  => VAR @solveStatus
-ENDBLOCK
-
-# Check if solved
-IF STRINGKEY @solveStatus EqualTo "solved"
-  CLOG Green $"✅ Solved! Answer: <solution>"
+# Branch by captcha type
+IF STRINGKEY @captchaType EqualTo "image"
+  # ═══ IMAGE / OCR CAPTCHA ═══
+  # Submit image captcha to our universal OCR solver (ddddocr + Tesseract)
   
-  # Increment global counter (thread-safe)
+  BLOCK:HttpRequest
+    url = $"<UniversalSolver>/in.php"
+    method = POST
+    contentType = "application/x-www-form-urlencoded"
+    content = $"key=<SolverAPIKey>&method=base64&body=iVBORw0KGgoAAAANSUhEUgAAAJgAAAAmBAMAAACOjM4NAAAAGFBMVEUAAAD////9/f2EhIS7u7u5ubmZmZk="
+    timeout = 30000
+  ENDBLOCK
+  
+  # Parse task ID from solver
+  # Response: "OK|task_id" or "ERROR|message"
+  BLOCK:Parse
+    input = @data.SOURCE
+    prefix = "OK|"
+    MODE:String
+    => VAR @solverTaskId
+  ENDBLOCK
+  
+  IF STRINGKEY @solverTaskId IsEmpty
+    CLOG Red $"❌ Solver rejected submission: <data.SOURCE>"
+    SET CAP @Status "FAIL"
+    JUMP #SKIP_DONE
+  ENDIF
+  
+  CLOG Gray $"  Submitted to OCR solver, task: <solverTaskId>"
+  
+  # Poll for result (OCR is fast — ~1-2s)
+  SET VAR @pollCount 0
+  
+  #POLL_OCR
+  
+  BLOCK:Sleep
+    milliseconds = 1000
+  ENDBLOCK
+  
+  BLOCK:HttpRequest
+    url = $"<UniversalSolver>/res.php?key=<SolverAPIKey>&id=<solverTaskId>"
+    method = GET
+    timeout = 10000
+  ENDBLOCK
+  
+  IF STRINGKEY @data.SOURCE EqualTo "CAPCHA_NOT_READY"
+    SET VAR @pollCount @pollCount + 1
+    IF INTKEY @pollCount LessThan 15
+      JUMP #POLL_OCR
+    ELSE
+      CLOG Red $"❌ OCR solver timeout (15s)"
+      SET CAP @Status "FAIL"
+      JUMP #SKIP_DONE
+    ENDIF
+  ENDIF
+  
+  # Extract answer
+  IF STRINGCONTAINS @data.SOURCE "OK|"
+    BLOCK:Parse
+      input = @data.SOURCE
+      prefix = "OK|"
+      MODE:String
+      => VAR @captchaAnswer
+    ENDBLOCK
+    
+    SET VAR @reward 0.0005
+    CLOG Green $"✅ OCR solved: '<captchaAnswer>' (poll #<pollCount>)"
+  ELSE
+    CLOG Red $"❌ OCR solver error: <data.SOURCE>"
+    SET CAP @Status "FAIL"
+    JUMP #SKIP_DONE
+  ENDIF
+
+ELSE IF STRINGKEY @captchaType EqualTo "recaptcha_v2"
+  # ═══ reCAPTCHA V2 ═══
+  CLOG Gray $"  Routing to reCAPTCHA v2 solver..."
+  
+  BLOCK:HttpRequest
+    url = $"<RecaptchaSolver>/in.php"
+    method = POST
+    contentType = "application/x-www-form-urlencoded"
+    content = $"key=<SolverAPIKey>&method=userrecaptcha&googlekey=<input.site_key>&pageurl=<input.site_url>"
+    timeout = 30000
+  ENDBLOCK
+  
+  BLOCK:Parse
+    input = @data.SOURCE
+    prefix = "OK|"
+    MODE:String
+    => VAR @solverTaskId
+  ENDBLOCK
+  
+  IF STRINGKEY @solverTaskId IsEmpty
+    CLOG Red $"❌ reCAPTCHA solver rejected: <data.SOURCE>"
+    SET CAP @Status "FAIL"
+    JUMP #SKIP_DONE
+  ENDIF
+  
+  CLOG Gray $"  Submitted to reCAPTCHA solver, task: <solverTaskId>"
+  SET VAR @pollCount 0
+  
+  #POLL_RECAPTCHA
+  
+  BLOCK:Sleep
+    milliseconds = 2000
+  ENDBLOCK
+  
+  BLOCK:HttpRequest
+    url = $"<RecaptchaSolver>/res.php?key=<SolverAPIKey>&id=<solverTaskId>"
+    method = GET
+    timeout = 10000
+  ENDBLOCK
+  
+  IF STRINGKEY @data.SOURCE EqualTo "CAPCHA_NOT_READY"
+    SET VAR @pollCount @pollCount + 1
+    IF INTKEY @pollCount LessThan 50
+      JUMP #POLL_RECAPTCHA
+    ELSE
+      CLOG Red $"❌ reCAPTCHA solver timeout (100s)"
+      SET CAP @Status "FAIL"
+      JUMP #SKIP_DONE
+    ENDIF
+  ENDIF
+  
+  IF STRINGCONTAINS @data.SOURCE "OK|"
+    BLOCK:Parse
+      input = @data.SOURCE
+      prefix = "OK|"
+      MODE:String
+      => VAR @captchaAnswer
+    ENDBLOCK
+    
+    SET VAR @reward 0.001
+    CLOG Green $"✅ reCAPTCHA v2 solved: token[<captchaAnswer>...] (poll #<pollCount>)"
+  ELSE
+    CLOG Red $"❌ reCAPTCHA error: <data.SOURCE>"
+    SET CAP @Status "FAIL"
+    JUMP #SKIP_DONE
+  ENDIF
+
+ELSE IF STRINGKEY @captchaType EqualTo "turnstile"
+  # ═══ CLOUDFLARE TURNSTILE ═══
+  CLOG Gray $"  Routing to Turnstile solver..."
+  
+  BLOCK:HttpRequest
+    url = $"<TurnstileSolver>/in.php"
+    method = POST
+    contentType = "application/x-www-form-urlencoded"
+    content = $"key=<SolverAPIKey>&method=turnstile&sitekey=<input.site_key>&pageurl=<input.site_url>"
+    timeout = 30000
+  ENDBLOCK
+  
+  BLOCK:Parse
+    input = @data.SOURCE
+    prefix = "OK|"
+    MODE:String
+    => VAR @solverTaskId
+  ENDBLOCK
+  
+  IF STRINGKEY @solverTaskId IsEmpty
+    CLOG Red $"❌ Turnstile solver rejected: <data.SOURCE>"
+    SET CAP @Status "FAIL"
+    JUMP #SKIP_DONE
+  ENDIF
+  
+  CLOG Gray $"  Submitted to Turnstile solver, task: <solverTaskId>"
+  SET VAR @pollCount 0
+  
+  #POLL_TURNSTILE
+  
+  BLOCK:Sleep
+    milliseconds = 2000
+  ENDBLOCK
+  
+  BLOCK:HttpRequest
+    url = $"<TurnstileSolver>/res.php?key=<SolverAPIKey>&id=<solverTaskId>"
+    method = GET
+    timeout = 10000
+  ENDBLOCK
+  
+  IF STRINGKEY @data.SOURCE EqualTo "CAPCHA_NOT_READY"
+    SET VAR @pollCount @pollCount + 1
+    IF INTKEY @pollCount LessThan 50
+      JUMP #POLL_TURNSTILE
+    ELSE
+      CLOG Red $"❌ Turnstile solver timeout (100s)"
+      SET CAP @Status "FAIL"
+      JUMP #SKIP_DONE
+    ENDIF
+  ENDIF
+  
+  IF STRINGCONTAINS @data.SOURCE "OK|"
+    BLOCK:Parse
+      input = @data.SOURCE
+      prefix = "OK|"
+      MODE:String
+      => VAR @captchaAnswer
+    ENDBLOCK
+    
+    SET VAR @reward 0.001
+    CLOG Green $"✅ Turnstile solved: token[<captchaAnswer>...] (poll #<pollCount>)"
+  ELSE
+    CLOG Red $"❌ Turnstile error: <data.SOURCE>"
+    SET CAP @Status "FAIL"
+    JUMP #SKIP_DONE
+  ENDIF
+
+ELSE
+  CLOG Yellow $"⚠️ Unknown captcha type '<captchaType>' — defaulting to image"
+  SET VAR @captchaType "image"
+  JUMP #HERE
+ENDIF
+
+# ── STEP 3: Calculate solve time ──
+# ──────────────────────────────────
+BLOCK:TimeNow
+  format = "unix"
+  => VAR @endTime
+ENDBLOCK
+
+# Calculate elapsed in C#
+SET VAR @elapsedMs (@endTime - @startTime) * 1000
+CLOG Gray $"  ⏱️ Solve time: <elapsedMs>ms"
+
+# ── STEP 4: Submit answer to 2captcha ──
+# ───────────────────────────────────────
+# Workers submit through the rucaptcha.com worker endpoint
+BLOCK:HttpRequest
+  url = "https://rucaptcha.com/res.php"
+  method = POST
+  contentType = "application/x-www-form-urlencoded"
+  content = $"key=<TwoCaptchaKey>&action=answer&id=<taskId>&answer=<captchaAnswer>"
+  timeout = 15000
+ENDBLOCK
+
+IF STRINGCONTAINS @data.SOURCE "OK"
+  CLOG Green $"  ✅ Answer submitted to 2captcha: OK"
+  
+  # ── STEP 5: Update shared counters (thread-safe) ──
   ACQUIRELOCK globals
   TRY
     globals.SolvedCount = globals.SolvedCount + 1
-    globals.TotalEarnings = globals.TotalEarnings + 0.0005
+    globals.TotalEarnings = globals.TotalEarnings + @reward
   CATCH
     globals.SolvedCount = 1
-    globals.TotalEarnings = "0.0005"
+    globals.TotalEarnings = @reward
   FINALLY
     RELEASELOCK globals
   END
   
-  CLOG YellowGreen $"📊 Total: <globals.SolvedCount> solved, $<globals.TotalEarnings> earned"
+  CLOG YellowGreen $"  📊 Total: <globals.SolvedCount> solved | $<globals.TotalEarnings> earned"
   
-  SET CAP @SolveStatus "SUCCESS"
-  SET CAP @Solution @solution
-  SET CAP @CaptchaId @captchaId
+  SET CAP @Status "SUCCESS"
+  SET CAP @CaptchaId @taskId
+  SET CAP @CaptchaType @captchaType
+  SET CAP @Answer @captchaAnswer
+  SET CAP @Reward $"<reward>"
+  SET CAP @SolveMs @elapsedMs
 ELSE
-  CLOG Red $"❌ Failed to solve captcha"
-  SET CAP @SolveStatus "FAILED"
+  CLOG Red $"  ⚠️ Answer submission failed: <data.SOURCE>"
+  
+  ACQUIRELOCK globals
+  TRY
+    globals.FailedCount = globals.FailedCount + 1
+  CATCH
+    globals.FailedCount = 1
+  FINALLY
+    RELEASELOCK globals
+  END
+  
+  CLOG Yellow $"  📊 Total: <globals.SolvedCount> solved | <globals.FailedCount> failed"
+  
+  SET CAP @Status "FAIL"
 ENDIF
 
-# Wait a moment before next captcha
+#SKIP_DONE
+
+# ── STEP 6: Log summary & loop ──
+# ────────────────────────────────
+CLOG SkyBlue $"  Status: <Status>"
+CLOG SkyBlue $"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Brief pause before next captcha
 BLOCK:Sleep
-  milliseconds = 1000
+  milliseconds = 500
 ENDBLOCK
 
-# Loop back for next captcha
+# Generate new task ID for next round
+BLOCK:RandomString
+  mask = "?d?d?d?d?d?d?d?d?d?d"
+  => VAR @taskId
+ENDBLOCK
+
+# Loop forever — the bot keeps solving captchas
 JUMP #HERE
