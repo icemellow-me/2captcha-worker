@@ -167,13 +167,19 @@ async def api_health(request):
         "universal_ocr": os.environ.get("SOLVER_UNIVERSAL", "http://172.17.0.1:8855"),
         "turnstile": os.environ.get("SOLVER_TURNSTILE", "http://172.17.0.1:8878"),
         "recaptcha": os.environ.get("SOLVER_RECAPTCHA", "http://172.17.0.1:8866"),
+        "xcaptcha": os.environ.get("SOLVER_XCAPTCHA", "http://172.17.0.1:8899"),
+        "cloudflare_jsd": os.environ.get("SOLVER_JSD", "http://172.17.0.1:8191"),
     }
     results = {}
     async with aiohttp.ClientSession() as s:
         for name, url in solvers.items():
             try:
                 async with s.get(f"{url}/health", timeout=aiohttp.ClientTimeout(total=5)) as r:
-                    results[name] = {"online": r.status == 200, "url": url}
+                    try:
+                        body = await r.json()
+                    except:
+                        body = None
+                    results[name] = {"online": r.status == 200, "url": url, "details": body}
             except:
                 results[name] = {"online": False, "url": url}
     return web.json_response(results)

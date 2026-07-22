@@ -34,6 +34,9 @@ SOLVER_API_KEY = os.environ.get("SOLVER_API_KEY", "8010000000ccojr5nrbg516w5jvw1
 
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "1.0"))
 MAX_SOLVE_TIME = 110
+# Safety margin: skip captcha this many seconds BEFORE the actual timeout
+# so we always have time to call closerecaptchabot and avoid account blocks
+TIMEOUT_SAFETY_MARGIN = int(os.environ.get("TIMEOUT_SAFETY_MARGIN", "5"))
 
 # 2captcha worker cabinet API
 CABINET_BASE = "2captcha.com"
@@ -327,36 +330,190 @@ class WorkerBot:
             log.error(f"Turnstile solver error: {e}")
             return None
 
-    async def _solve_captcha(self, captcha_data: dict) -> tuple:
-        """Route captcha to appropriate solver. Returns (answer, solve_time_ms)."""
+    async def _solve_xcaptcha(self, captcha_data: dict) -> Optional[str]:
+        """
+        Solve xCaptcha (wcaptcha) challenges using our xcaptcha solver fleet.
+        2captcha sends xcaptcha tasks with an image (base64 of the xCaptcha grid)
+        and sometimes a sitekey/pageurl.
+
+        NOTE: The xcaptcha solver may return either:
+        - 2captcha format: "OK|task_id" (newer code)
+        - JSON format: {"status": 1, "request": "task_id"} (older running code)
+        We handle both.
+        """
+        image_b64 = captcha_data.get("image", "")
+        sitekey = captcha_data.get("sitekey", "")
+        pageurl = captcha_data.get("pageurl", "")
+
+        # If we have a sitekey, use the xcaptcha solver with that sitekey
+        if not sitekey:
+            # Use the default text-type sitekey from xcaptcha solver config
+            sitekey = "11aa62606fb968f3674742df60598957"  # text type default
+
+        try:
+            async with self.session.post(
+                f"{SOLVER_XCAPTCHA}/in.php",
+                data={
+                    "key": SOLVER_API_KEY,
+                    "method": "wcaptcha",
+                    "sitekey": sitekey,
+                    "pageurl": pageurl or "https://xcaptcha.com",
+                },
+            ) as resp:
+                content_type = resp.headers.get("Content-Type", "")
+                body = await resp.text()
+
+                # Parse the response — handle both OK| format and JSON format
+                task_id = None
+                if body.startswith("OK|"):
+                    task_id = body.split("|", 1)[1]
+                elif "application/json" in content_type:
+                    try:
+                        data = json.loads(body)
+                        if data.get("status") == 1:
+                            task_id = data.get("request", "")
+                    except json.JSONDecodeError:
+                        pass
+
+                if not task_id:
+                    log.warning(f"xcaptcha solver rejected: {body[:100]}")
+                    return None
+
+                # Poll for result — xcaptcha solver takes ~9s
+                for _ in range(30):
+                    await asyncio.sleep(1)
+                    async with self.session.get(
+                        f"{SOLVER_XCAPTCHA}/res.php",
+                        params={"key": SOLVER_API_KEY, "id": task_id},
+                    ) as r:
+                        res = await r.text()
+                        if res.startswith("OK|"):
+                            return res.split("|", 1)[1]
+                        if "CAPCHA_NOT_READY" not in res:
+                            # Try JSON format too
+                            try:
+                                res_data = json.loads(res)
+                                if res_data.get("status") == 1:
+                                    return res_data.get("request", "")
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                            log.warning(f"xcaptcha solver error: {res[:100]}")
+                            return None
+                return None
+        except Exception as e:
+            log.error(f"xCaptcha solver error: {e}")
+            return None
+
+    async def _solve_hcaptcha(self, sitekey: str, pageurl: str) -> Optional[str]:
+        """Solve hCaptcha using the universal solver (supports hcaptcha via hcaptcha-challenger)."""
+        try:
+            async with self.session.post(
+                f"{SOLVER_UNIVERSAL}/in.php",
+                data={"key": SOLVER_API_KEY, "method": "hcaptcha",
+                      "sitekey": sitekey, "pageurl": pageurl},
+            ) as resp:
+                result = await resp.text()
+                if result.startswith("OK|"):
+                    task_id = result.split("|", 1)[1]
+                    for _ in range(60):
+                        await asyncio.sleep(2)
+                        async with self.session.get(
+                            f"{SOLVER_UNIVERSAL}/res.php",
+                            params={"key": SOLVER_API_KEY, "id": task_id},
+                        ) as r:
+                            res = await r.text()
+                            if res.startswith("OK|"):
+                                return res.split("|", 1)[1]
+                            if "CAPCHA_NOT_READY" not in res:
+                                return None
+                return None
+        except Exception as e:
+            log.error(f"hCaptcha solver error: {e}")
+            return None
+
+    async def _solve_cloudflare_jsd(self, pageurl: str, **kwargs) -> Optional[str]:
+        """Solve Cloudflare JS challenge / Just Dance using the JSD solver at port 8191."""
+        # The JSD solver uses a different API: POST /v1 with JSON body
+        try:
+            async with self.session.post(
+                f"{SOLVER_JSD}/v1",
+                json={
+                    "cmd": "request.get",
+                    "url": pageurl,
+                    "max_timeout": 60000,
+                },
+                headers={"Content-Type": "application/json"},
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                status = data.get("status", {})
+                if status.get("status") == "ok":
+                    # Extract cf_clearance cookie or token
+                    return data.get("solution", {}).get("url", "")
+                return None
+        except Exception as e:
+            log.error(f"JSD/Cloudflare solver error: {e}")
+            return None
+
+    async def _solve_captcha(self, captcha_data: dict, deadline: float = 0) -> tuple:
+        """
+        Route captcha to appropriate solver. Returns (answer, solve_time_ms).
+        If deadline is set, cancels early so caller can skip before timeout.
+        """
         ctype = captcha_data.get("captchatype", "captcha")
         start = time.time()
 
-        if ctype in ("captcha", "xcaptcha", "normal"):
-            img = captcha_data.get("image", "")
-            if img:
-                answer = await self._solve_image_captcha(img)
-            else:
-                pageurl = captcha_data.get("pageurl", "")
-                sitekey = captcha_data.get("sitekey", "")
-                if sitekey:
-                    answer = await self._solve_recaptcha(sitekey, pageurl)
-                else:
-                    return None, 0
-        elif ctype in ("recaptcha",):
-            pageurl = captcha_data.get("pageurl", "")
-            sitekey = captcha_data.get("sitekey", "")
-            answer = await self._solve_recaptcha(sitekey, pageurl)
-        elif ctype in ("turnstile",):
-            pageurl = captcha_data.get("pageurl", "")
-            sitekey = captcha_data.get("sitekey", "")
-            answer = await self._solve_turnstile(sitekey, pageurl)
-        elif ctype in ("coordinates", "click"):
+        # Check if we still have time before the deadline
+        if deadline > 0:
+            remaining = deadline - time.time()
+            if remaining < 2:
+                log.warning(f"⏰ Only {remaining:.1f}s left before deadline — not enough time to solve")
+                return None, 0
+
+        if ctype in ("captcha", "normal"):
+            # Plain text/image captcha — use universal OCR
             img = captcha_data.get("image", "")
             if img:
                 answer = await self._solve_image_captcha(img)
             else:
                 return None, 0
+
+        elif ctype == "xcaptcha":
+            # xCaptcha (wcaptcha emoji grid) — route to xcaptcha solver
+            answer = await self._solve_xcaptcha(captcha_data)
+
+        elif ctype in ("recaptcha",):
+            pageurl = captcha_data.get("pageurl", "")
+            sitekey = captcha_data.get("sitekey", "")
+            answer = await self._solve_recaptcha(sitekey, pageurl)
+
+        elif ctype in ("turnstile",):
+            pageurl = captcha_data.get("pageurl", "")
+            sitekey = captcha_data.get("sitekey", "")
+            answer = await self._solve_turnstile(sitekey, pageurl)
+
+        elif ctype in ("hcaptcha",):
+            pageurl = captcha_data.get("pageurl", "")
+            sitekey = captcha_data.get("sitekey", "")
+            answer = await self._solve_hcaptcha(sitekey, pageurl)
+
+        elif ctype in ("coordinates", "click"):
+            # Click captcha — use universal OCR for coordinate detection
+            img = captcha_data.get("image", "")
+            if img:
+                answer = await self._solve_image_captcha(img)
+            else:
+                return None, 0
+
+        elif ctype in ("text",):
+            # Text captcha — use universal OCR
+            img = captcha_data.get("image", "")
+            if img:
+                answer = await self._solve_image_captcha(img)
+            else:
+                return None, 0
+
         else:
             log.warning(f"⚠️ Unknown captcha type: {ctype}")
             return None, 0
@@ -384,7 +541,30 @@ class WorkerBot:
                 info.last_captcha_type = ctype
                 log.info(f"📥 [{info.label}] Got captcha #{captcha_id} type={ctype} rate=${rate:.5f} timeout={timeout}s")
 
-                answer, solve_ms = await self._solve_captcha(captcha_data)
+                # ── Calculate deadline ────────────────────────────────
+                # We must submit or skip BEFORE the captcha times out.
+                # Safety margin = TIMEOUT_SAFETY_MARGIN seconds before the actual timeout.
+                # This gives us time to call closerecaptchabot (skip) if solving fails/takes too long.
+                solve_deadline = time.time() + max(timeout - TIMEOUT_SAFETY_MARGIN, 10)
+                remaining_for_solve = solve_deadline - time.time()
+
+                log.info(f"⏱️ [{info.label}] Solve deadline: {remaining_for_solve:.1f}s (timeout={timeout}s, margin={TIMEOUT_SAFETY_MARGIN}s)")
+
+                # ── Attempt to solve with deadline ───────────────────
+                answer = None
+                solve_ms = 0
+                try:
+                    answer, solve_ms = await asyncio.wait_for(
+                        self._solve_captcha(captcha_data, deadline=solve_deadline),
+                        timeout=remaining_for_solve,
+                    )
+                except asyncio.TimeoutError:
+                    log.warning(f"⏰ [{info.label}] Solve timed out after {remaining_for_solve:.1f}s — skipping captcha #{captcha_id}")
+                    answer = None
+                except asyncio.CancelledError:
+                    log.warning(f"⏰ [{info.label}] Solve cancelled for #{captcha_id} — deadline reached")
+                    answer = None
+
                 info.last_solve_time_ms = solve_ms
 
                 if answer:
@@ -402,11 +582,15 @@ class WorkerBot:
                                            "reward": 0, "status": "submit_failed", "time": time.time()})
                         log.warning(f"⚠️ [{info.label}] Submit failed #{captcha_id}: {result.get('error')}")
                 else:
+                    # ── CRITICAL: Skip captcha via closerecaptchabot ──
+                    # This tells 2captcha "I can't solve this" WITHOUT penalty.
+                    # If we DON'T call this, the captcha times out and the account
+                    # can get BLOCKED for ignoring captchas.
+                    skip_result = await self._skip_captcha(info, captcha_id)
                     info.failed += 1
-                    await self._skip_captcha(info, captcha_id)
                     info.history.append({"id": captcha_id, "type": ctype, "answer": "",
                                        "reward": 0, "status": "skipped", "time": time.time()})
-                    log.warning(f"⏭️ [{info.label}] Skipped #{captcha_id} ({ctype}) — solver returned no answer")
+                    log.warning(f"⏭️ [{info.label}] Skipped #{captcha_id} ({ctype}) — solver returned no answer (skip_result: {skip_result.get('status', 'unknown')})")
 
                 if len(info.history) > 100:
                     info.history = info.history[-50:]
