@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
-2Captcha Worker Bot — Core Worker Engine
-Polls 2captcha for captchas, routes to our solver fleet, submits answers.
+2Captcha Worker Bot — Core Worker Engine (v2)
+Uses the REAL 2captcha worker cabinet API (reverse-engineered from JS).
+Supports multiple accounts simultaneously.
 """
 
 import asyncio
 import aiohttp
 import base64
+import hashlib
 import time
 import json
 import logging
 import os
-import re
-from typing import Optional, Tuple
+from typing import Optional, Dict, List
+from dataclasses import dataclass, field
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,473 +25,415 @@ log = logging.getLogger("2captcha-worker")
 
 # ─── Configuration ────────────────────────────────────────────
 
-# 2captcha account key (customer/worker key)
-CAPTCHA_KEY = os.environ.get("CAPTCHA_KEY", "ec63b74d6ee7848c14b01cc436c6eb21")
-
-# 2captcha API endpoints
-API_BASE = os.environ.get("CAPTCHA_API_BASE", "https://2captcha.com")
-RUCAPTCHA_BASE = os.environ.get("RUCAPTCHA_BASE", "https://rucaptcha.com")
-API_V2_BASE = "https://api.2captcha.com"
-
-# Our solver fleet endpoints (Docker gateway)
 SOLVER_UNIVERSAL = os.environ.get("SOLVER_UNIVERSAL", "http://172.17.0.1:8855")
 SOLVER_TURNSTILE = os.environ.get("SOLVER_TURNSTILE", "http://172.17.0.1:8878")
 SOLVER_RECAPTCHA = os.environ.get("SOLVER_RECAPTCHA", "http://172.17.0.1:8866")
 SOLVER_XCAPTCHA = os.environ.get("SOLVER_XCAPTCHA", "http://172.17.0.1:8899")
+SOLVER_JSD = os.environ.get("SOLVER_JSD", "http://172.17.0.1:8191")
+SOLVER_API_KEY = os.environ.get("SOLVER_API_KEY", "8010000000ccojr5nrbg516w5jvw1wu9")
 
-# Worker settings
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "1.0"))
-MAX_SOLVE_TIME = 110  # 110s to stay under 120s timer
-MIN_PAYOUT = 0.5  # minimum payout in USD
+MAX_SOLVE_TIME = 110
 
-# Worker rates per 1000 captchas (2captcha worker pay rates)
+# 2captcha worker cabinet API
+CABINET_BASE = "2captcha.com"
+CABINET_VERSION = "interface:5"
+SALT_PREFIX = "67y89ikojigf+"
+
+# Worker rates per captcha type
 RATES = {
-    "normal": 0.50,       # $0.50 per 1000 normal captchas
-    "recaptcha_v2": 1.00, # $1.00 per 1000 reCAPTCHA v2
-    "turnstile": 1.00,    # $1.00 per 1000 Turnstile
-    "hcaptcha": 1.00,     # $1.00 per 1000 hCaptcha
-    "image": 0.50,        # $0.50 per 1000 image captchas
-    "text": 0.10,         # $0.10 per 1000 text captchas
-    "coordinates": 0.70,  # $0.70 per 1000 coordinate captchas
+    "captcha": 0.0005, "xcaptcha": 0.0005, "recaptcha": 0.001,
+    "turnstile": 0.001, "hcaptcha": 0.001, "coordinates": 0.0007,
+    "text": 0.0001,
 }
 
 
+def compute_salt(captcha_id: str) -> str:
+    """Compute the salt for a captcha ID."""
+    return hashlib.md5(f"{SALT_PREFIX}{captcha_id}".encode()).hexdigest()
+
+
+@dataclass
+class AccountInfo:
+    """2captcha worker account info."""
+    thash: str
+    label: str = ""
+    user_id: int = 0
+    email: str = ""
+    balance: float = 0.0
+    reputation: float = 0.0
+    solved: int = 0
+    failed: int = 0
+    earnings: float = 0.0
+    running: bool = False
+    last_captcha_id: str = ""
+    last_captcha_type: str = ""
+    last_solve_time_ms: int = 0
+    history: List[dict] = field(default_factory=list)
+
+
 class WorkerBot:
-    """2captcha worker bot that automates captcha solving."""
+    """2captcha worker bot supporting multiple accounts."""
 
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
+        self.accounts: Dict[str, AccountInfo] = {}
         self.running = False
+        self._stop_event = asyncio.Event()
+        self._tasks: List[asyncio.Task] = []
         self.total_solved = 0
         self.total_failed = 0
         self.total_earnings = 0.0
-        self.current_balance = 0.0
-        self.current_task = None  # current captcha being solved
-        self.captcha_queue = asyncio.Queue()
-        self._stop_event = asyncio.Event()
+
+    def add_account(self, thash: str, label: str = "") -> bool:
+        """Add a 2captcha worker account by thash."""
+        thash = thash.strip()
+        if not thash or len(thash) < 16:
+            return False
+        if thash in self.accounts:
+            return False
+        self.accounts[thash] = AccountInfo(thash=thash, label=label or f"Account-{len(self.accounts)+1}")
+        log.info(f"➕ Added account: {self.accounts[thash].label} (thash: {thash[:8]}...)")
+        return True
+
+    def remove_account(self, thash: str) -> bool:
+        """Remove an account."""
+        if thash in self.accounts:
+            info = self.accounts.pop(thash)
+            log.info(f"➖ Removed account: {info.label}")
+            return True
+        return False
+
+    def get_accounts_summary(self) -> list:
+        """Get summary of all accounts for the dashboard."""
+        return [{
+            "thash": a.thash,
+            "label": a.label,
+            "user_id": a.user_id,
+            "email": a.email,
+            "balance": a.balance,
+            "reputation": a.reputation,
+            "solved": a.solved,
+            "failed": a.failed,
+            "earnings": round(a.earnings, 6),
+            "running": a.running,
+            "last_captcha_id": a.last_captcha_id,
+            "last_captcha_type": a.last_captcha_type,
+            "last_solve_time_ms": a.last_solve_time_ms,
+        } for a in self.accounts.values()]
+
+    def get_aggregate_stats(self) -> dict:
+        """Get aggregate stats across all accounts."""
+        return {
+            "total_solved": sum(a.solved for a in self.accounts.values()),
+            "total_failed": sum(a.failed for a in self.accounts.values()),
+            "total_earnings": round(sum(a.earnings for a in self.accounts.values()), 6),
+            "total_balance": round(sum(a.balance for a in self.accounts.values()), 6),
+            "account_count": len(self.accounts),
+            "active_accounts": sum(1 for a in self.accounts.values() if a.running),
+            "running": self.running,
+        }
 
     async def start(self):
-        """Start the worker bot."""
-        self.session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=120)
-        )
+        """Start the worker bot with all accounts."""
+        if not self.accounts:
+            log.warning("⚠️ No accounts configured — add accounts first")
+            return
+        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120))
         self.running = True
         self._stop_event.clear()
-
-        # Check balance
-        balance = await self.get_balance()
-        if balance is not None:
-            self.current_balance = balance
-            log.info(f"💰 Account balance: ${balance:.4f}")
-        else:
-            log.warning("⚠️ Could not retrieve balance — key may be worker-only or invalid")
-
-        log.info("🚀 Worker bot started — polling for captchas...")
-        
-        # Start captcha polling and solving loops concurrently
-        poller = asyncio.create_task(self._poll_loop())
-        solver = asyncio.create_task(self._solve_loop())
-        
+        log.info(f"🚀 Worker bot started with {len(self.accounts)} account(s)")
+        for thash, info in self.accounts.items():
+            await self._login(info)
+        self._tasks = [asyncio.create_task(self._account_loop(info)) for info in self.accounts.values()]
         await self._stop_event.wait()
-        
-        # Clean up
-        poller.cancel()
-        solver.cancel()
+        for t in self._tasks:
+            t.cancel()
         await self.session.close()
         log.info("🛑 Worker bot stopped")
+
+    async def _login(self, info: AccountInfo):
+        """Login to the 2captcha worker cabinet."""
+        try:
+            async with self.session.post(
+                f"https://{CABINET_BASE}/captcha_api.php?action=login&thash={info.thash}&v={CABINET_VERSION}",
+                headers={"Referer": f"https://{CABINET_BASE}/play-and-earn/play"},
+            ) as resp:
+                data = await resp.json()
+                if data.get("status") == 1:
+                    d = data.get("data", {})
+                    info.user_id = d.get("user_id", 0)
+                    info.email = d.get("email", "")
+                    info.balance = float(d.get("balance", 0))
+                    info.reputation = float(d.get("reputation", 0))
+                    log.info(f"✅ Login [{info.label}]: {info.email} balance=${info.balance:.5f} rep={info.reputation}")
+                    return True
+                else:
+                    log.error(f"❌ Login failed [{info.label}]: {data.get('error', 'unknown')}")
+                    return False
+        except Exception as e:
+            log.error(f"❌ Login error [{info.label}]: {e}")
+            return False
+
+    async def _get_captcha(self, info: AccountInfo) -> Optional[dict]:
+        """Fetch a captcha from the worker cabinet."""
+        try:
+            async with self.session.get(
+                f"https://{CABINET_BASE}/captcha_api.php",
+                params={
+                    "action": "getbot",
+                    "captcha_type": "0",
+                    "captchatype": "captcha",
+                    "v": CABINET_VERSION,
+                    "thread": "0",
+                    "thash": info.thash,
+                },
+                headers={"Referer": f"https://{CABINET_BASE}/play-and-earn/play"},
+            ) as resp:
+                data = await resp.json()
+                if data.get("status") == 1:
+                    cap_data = data.get("data", {})
+                    if isinstance(cap_data, dict) and "captcha_id" in cap_data:
+                        info.balance = float(data.get("balance", info.balance))
+                        info.reputation = float(data.get("reputation", info.reputation))
+                        return cap_data
+                return None
+        except Exception as e:
+            log.debug(f"getbot error [{info.label}]: {e}")
+            return None
+
+    async def _submit_answer(self, info: AccountInfo, captcha_id: str, answer: str, confirmed: int = 1) -> dict:
+        """Submit an answer to the worker cabinet."""
+        salt = compute_salt(captcha_id)
+        payload = {
+            "action": "sendrecaptchabot",
+            "v": CABINET_VERSION,
+            "thash": info.thash,
+            f"code[{captcha_id}]": answer,
+            f"saltids[{captcha_id}]": salt,
+            "confirmed": str(confirmed),
+        }
+        try:
+            async with self.session.post(
+                f"https://{CABINET_BASE}/captcha_api.php",
+                data=payload,
+                headers={"Referer": f"https://{CABINET_BASE}/play-and-earn/play"},
+            ) as resp:
+                return await resp.json()
+        except Exception as e:
+            log.error(f"Submit error [{info.label}]: {e}")
+            return {"status": 0, "error": str(e)}
+
+    async def _skip_captcha(self, info: AccountInfo, captcha_id: str) -> dict:
+        """Skip/close a captcha."""
+        salt = compute_salt(captcha_id)
+        payload = {
+            "action": "closerecaptchabot",
+            "v": CABINET_VERSION,
+            "thash": info.thash,
+            f"ids[{captcha_id}]": captcha_id,
+            f"saltids[{captcha_id}]": salt,
+            "close": "0",
+        }
+        try:
+            async with self.session.post(
+                f"https://{CABINET_BASE}/captcha_api.php",
+                data=payload,
+                headers={"Referer": f"https://{CABINET_BASE}/play-and-earn/play"},
+            ) as resp:
+                return await resp.json()
+        except Exception as e:
+            log.debug(f"Skip error [{info.label}]: {e}")
+            return {"status": 0, "error": str(e)}
+
+    async def _solve_image_captcha(self, image_b64: str) -> Optional[str]:
+        """Solve an image captcha using our OCR solver fleet."""
+        b64_data = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
+        try:
+            async with self.session.post(
+                f"{SOLVER_UNIVERSAL}/in.php",
+                data={"key": SOLVER_API_KEY, "method": "base64", "body": b64_data},
+            ) as resp:
+                result = await resp.text()
+                if result.startswith("OK|"):
+                    task_id = result.split("|", 1)[1]
+                    for _ in range(15):
+                        await asyncio.sleep(1)
+                        async with self.session.get(
+                            f"{SOLVER_UNIVERSAL}/res.php",
+                            params={"key": SOLVER_API_KEY, "id": task_id},
+                        ) as r:
+                            res = await r.text()
+                            if res.startswith("OK|"):
+                                return res.split("|", 1)[1]
+                            if "CAPCHA_NOT_READY" not in res:
+                                return None
+                return None
+        except Exception as e:
+            log.error(f"OCR solver error: {e}")
+            return None
+
+    async def _solve_recaptcha(self, sitekey: str, pageurl: str) -> Optional[str]:
+        """Solve reCAPTCHA v2 using our solver fleet."""
+        try:
+            async with self.session.post(
+                f"{SOLVER_RECAPTCHA}/in.php",
+                data={"key": SOLVER_API_KEY, "method": "userrecaptcha",
+                      "googlekey": sitekey, "pageurl": pageurl},
+            ) as resp:
+                result = await resp.text()
+                if result.startswith("OK|"):
+                    task_id = result.split("|", 1)[1]
+                    for _ in range(50):
+                        await asyncio.sleep(2)
+                        async with self.session.get(
+                            f"{SOLVER_RECAPTCHA}/res.php",
+                            params={"key": SOLVER_API_KEY, "id": task_id},
+                        ) as r:
+                            res = await r.text()
+                            if res.startswith("OK|"):
+                                return res.split("|", 1)[1]
+                            if "CAPCHA_NOT_READY" not in res:
+                                return None
+                return None
+        except Exception as e:
+            log.error(f"reCAPTCHA solver error: {e}")
+            return None
+
+    async def _solve_turnstile(self, sitekey: str, pageurl: str) -> Optional[str]:
+        """Solve Cloudflare Turnstile using our solver fleet."""
+        try:
+            async with self.session.post(
+                f"{SOLVER_TURNSTILE}/in.php",
+                data={"key": SOLVER_API_KEY, "method": "turnstile",
+                      "sitekey": sitekey, "pageurl": pageurl},
+            ) as resp:
+                result = await resp.text()
+                if result.startswith("OK|"):
+                    task_id = result.split("|", 1)[1]
+                    for _ in range(50):
+                        await asyncio.sleep(2)
+                        async with self.session.get(
+                            f"{SOLVER_TURNSTILE}/res.php",
+                            params={"key": SOLVER_API_KEY, "id": task_id},
+                        ) as r:
+                            res = await r.text()
+                            if res.startswith("OK|"):
+                                return res.split("|", 1)[1]
+                            if "CAPCHA_NOT_READY" not in res:
+                                return None
+                return None
+        except Exception as e:
+            log.error(f"Turnstile solver error: {e}")
+            return None
+
+    async def _solve_captcha(self, captcha_data: dict) -> tuple:
+        """Route captcha to appropriate solver. Returns (answer, solve_time_ms)."""
+        ctype = captcha_data.get("captchatype", "captcha")
+        start = time.time()
+
+        if ctype in ("captcha", "xcaptcha", "normal"):
+            img = captcha_data.get("image", "")
+            if img:
+                answer = await self._solve_image_captcha(img)
+            else:
+                pageurl = captcha_data.get("pageurl", "")
+                sitekey = captcha_data.get("sitekey", "")
+                if sitekey:
+                    answer = await self._solve_recaptcha(sitekey, pageurl)
+                else:
+                    return None, 0
+        elif ctype in ("recaptcha",):
+            pageurl = captcha_data.get("pageurl", "")
+            sitekey = captcha_data.get("sitekey", "")
+            answer = await self._solve_recaptcha(sitekey, pageurl)
+        elif ctype in ("turnstile",):
+            pageurl = captcha_data.get("pageurl", "")
+            sitekey = captcha_data.get("sitekey", "")
+            answer = await self._solve_turnstile(sitekey, pageurl)
+        elif ctype in ("coordinates", "click"):
+            img = captcha_data.get("image", "")
+            if img:
+                answer = await self._solve_image_captcha(img)
+            else:
+                return None, 0
+        else:
+            log.warning(f"⚠️ Unknown captcha type: {ctype}")
+            return None, 0
+
+        elapsed = int((time.time() - start) * 1000)
+        return answer, elapsed
+
+    async def _account_loop(self, info: AccountInfo):
+        """Main polling loop for a single account."""
+        info.running = True
+        log.info(f"🔄 [{info.label}] Polling for captchas...")
+        while self.running and not self._stop_event.is_set():
+            try:
+                captcha_data = await self._get_captcha(info)
+                if captcha_data is None:
+                    await asyncio.sleep(POLL_INTERVAL)
+                    continue
+
+                captcha_id = str(captcha_data.get("captcha_id", ""))
+                ctype = captcha_data.get("captchatype", "captcha")
+                rate = float(captcha_data.get("rate", RATES.get(ctype, 0.0005)))
+                timeout = int(captcha_data.get("timeout", 60))
+
+                info.last_captcha_id = captcha_id
+                info.last_captcha_type = ctype
+                log.info(f"📥 [{info.label}] Got captcha #{captcha_id} type={ctype} rate=${rate:.5f} timeout={timeout}s")
+
+                answer, solve_ms = await self._solve_captcha(captcha_data)
+                info.last_solve_time_ms = solve_ms
+
+                if answer:
+                    result = await self._submit_answer(info, captcha_id, answer)
+                    if result.get("status") == 1:
+                        info.solved += 1
+                        info.earnings += rate
+                        info.balance += rate
+                        info.history.append({"id": captcha_id, "type": ctype, "answer": answer,
+                                           "reward": rate, "status": "solved", "time": time.time()})
+                        log.info(f"✅ [{info.label}] Solved #{captcha_id} ({ctype}) in {solve_ms}ms +${rate:.5f}")
+                    else:
+                        info.failed += 1
+                        info.history.append({"id": captcha_id, "type": ctype, "answer": answer,
+                                           "reward": 0, "status": "submit_failed", "time": time.time()})
+                        log.warning(f"⚠️ [{info.label}] Submit failed #{captcha_id}: {result.get('error')}")
+                else:
+                    info.failed += 1
+                    await self._skip_captcha(info, captcha_id)
+                    info.history.append({"id": captcha_id, "type": ctype, "answer": "",
+                                       "reward": 0, "status": "skipped", "time": time.time()})
+                    log.warning(f"⏭️ [{info.label}] Skipped #{captcha_id} ({ctype}) — solver returned no answer")
+
+                if len(info.history) > 100:
+                    info.history = info.history[-50:]
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"❌ [{info.label}] Loop error: {e}")
+                await asyncio.sleep(5)
+
+        info.running = False
+        log.info(f"🛑 [{info.label}] Account loop stopped")
 
     async def stop(self):
         """Stop the worker bot."""
         self.running = False
         self._stop_event.set()
+        for t in self._tasks:
+            t.cancel()
 
-    async def get_balance(self) -> Optional[float]:
-        """Get current account balance."""
-        # Try API v2 first
-        try:
-            async with self.session.post(
-                f"{API_V2_BASE}/getBalance",
-                json={"clientKey": CAPTCHA_KEY},
-                timeout=10
-            ) as resp:
-                data = await resp.json()
-                if data.get("errorId") == 0:
-                    return float(data.get("balance", 0))
-        except Exception:
-            pass
+    async def refresh_balances(self):
+        """Refresh all account balances by logging in again."""
+        if not self.session:
+            self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+        for info in self.accounts.values():
+            await self._login(info)
 
-        # Try v1 API
-        try:
-            async with self.session.get(
-                f"{API_BASE}/res.php",
-                params={"key": CAPTCHA_KEY, "action": "getbalance", "json": 1},
-                timeout=10
-            ) as resp:
-                data = await resp.json()
-                if data.get("status") == 1:
-                    return float(data.get("request", 0))
-        except Exception:
-            pass
-
-        # Try rucaptcha mirror
-        try:
-            async with self.session.get(
-                f"{RUCAPTCHA_BASE}/res.php",
-                params={"key": CAPTCHA_KEY, "action": "getbalance", "json": 1},
-                timeout=10
-            ) as resp:
-                data = await resp.json()
-                if data.get("status") == 1:
-                    return float(data.get("request", 0))
-        except Exception:
-            pass
-
-        return None
-
-    async def _poll_loop(self):
-        """Poll 2captcha for available captchas to solve as a worker."""
-        while self.running:
-            try:
-                # In worker mode, we get captchas from the queue
-                # The 2captcha worker system works like this:
-                # 1. Worker software connects to 2captcha
-                # 2. 2captcha sends captchas to the worker
-                # 3. Worker solves and returns the answer
-                
-                # Since the API key may be worker-only, we need to use the
-                # cabinet API. However, for automated solving, we can also
-                # work as a customer proxy: submit captchas to our own solver
-                # and return results.
-                
-                # For now, poll for balance changes and use the worker endpoint
-                balance = await self.get_balance()
-                if balance is not None and balance != self.current_balance:
-                    diff = balance - self.current_balance
-                    if diff > 0:
-                        log.info(f"💰 Balance increased by ${diff:.4f} (new: ${balance:.4f})")
-                    self.current_balance = balance
-
-                await asyncio.sleep(5)  # Poll every 5 seconds
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                log.error(f"Poll error: {e}")
-                await asyncio.sleep(2)
-
-    async def _solve_loop(self):
-        """Solve captchas from the queue."""
-        while self.running:
-            try:
-                # Get a captcha from the queue (or wait)
-                task = await asyncio.wait_for(
-                    self.captcha_queue.get(),
-                    timeout=1.0
-                )
-                await self._solve_captcha(task)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                log.error(f"Solve loop error: {e}")
-                await asyncio.sleep(1)
-
-    async def _solve_captcha(self, task: dict):
-        """Solve a single captcha using our solver fleet."""
-        captcha_id = task["id"]
-        captcha_type = task.get("type", "image")
-        start_time = time.time()
-
-        log.info(f"📝 Solving captcha {captcha_id} (type: {captcha_type})")
-
-        try:
-            # Route to appropriate solver based on type
-            if captcha_type in ("image", "base64", "normal", "text"):
-                answer = await self._solve_image_captcha(task)
-            elif captcha_type in ("recaptcha_v2", "userrecaptcha"):
-                answer = await self._solve_recaptcha(task)
-            elif captcha_type in ("turnstile",):
-                answer = await self._solve_turnstile(task)
-            elif captcha_type in ("hcaptcha",):
-                answer = await self._solve_hcaptcha(task)
-            elif captcha_type in ("coord", "coordinates", "grid", "canvas", "click"):
-                answer = await self._solve_coord_captcha(task)
-            else:
-                answer = await self._solve_image_captcha(task)
-
-            solve_ms = int((time.time() - start_time) * 1000)
-            reward = RATES.get(captcha_type, 0.50) / 1000.0
-
-            if answer:
-                # Submit answer to 2captcha
-                submitted = await self._submit_answer(captcha_id, answer)
-                if submitted:
-                    self.total_solved += 1
-                    self.total_earnings += reward
-                    log.info(f"✅ Solved {captcha_id} in {solve_ms}ms — +${reward:.6f}")
-                    return answer
-            else:
-                self.total_failed += 1
-                log.warning(f"❌ Failed to solve {captcha_id}")
-
-        except Exception as e:
-            self.total_failed += 1
-            log.error(f"❌ Error solving {captcha_id}: {e}")
-
-        return None
-
-    async def _solve_image_captcha(self, task: dict) -> Optional[str]:
-        """Solve image/base64 captcha using universal OCR solver."""
-        image_data = task.get("image_base64", "")
-        image_url = task.get("image_url", "")
-
-        if not image_data and not image_url:
-            return None
-
-        try:
-            # Submit to our universal solver
-            if image_data:
-                data = {
-                    "key": "worker",
-                    "method": "base64",
-                    "body": image_data,
-                }
-            else:
-                data = {
-                    "key": "worker",
-                    "method": "image",
-                    "captcha_img": image_url,
-                }
-
-            async with self.session.post(
-                f"{SOLVER_UNIVERSAL}/in.php",
-                data=data,
-                timeout=30
-            ) as resp:
-                result = await resp.text()
-                if not result.startswith("OK|"):
-                    log.error(f"Solver error: {result}")
-                    return None
-                task_id = result[3:]
-
-            # Poll for result
-            for _ in range(20):
-                await asyncio.sleep(1)
-                async with self.session.get(
-                    f"{SOLVER_UNIVERSAL}/res.php",
-                    params={"key": "worker", "id": task_id},
-                    timeout=10
-                ) as resp:
-                    result = await resp.text()
-                    if result == "CAPCHA_NOT_READY":
-                        continue
-                    if result.startswith("OK|"):
-                        return result[3:]
-                    return None
-
-            return None
-        except Exception as e:
-            log.error(f"Image captcha error: {e}")
-            return None
-
-    async def _solve_recaptcha(self, task: dict) -> Optional[str]:
-        """Solve reCAPTCHA v2 using our dedicated solver."""
-        googlekey = task.get("googlekey", task.get("sitekey", ""))
-        pageurl = task.get("pageurl", "")
-
-        if not googlekey or not pageurl:
-            return None
-
-        try:
-            # Submit to our reCAPTCHA solver
-            async with self.session.post(
-                f"{SOLVER_RECAPTCHA}/in.php",
-                data={
-                    "key": "worker",
-                    "method": "userrecaptcha",
-                    "googlekey": googlekey,
-                    "pageurl": pageurl,
-                },
-                timeout=30
-            ) as resp:
-                result = await resp.text()
-                if not result.startswith("OK|"):
-                    return None
-                task_id = result[3:]
-
-            # Poll for token
-            for _ in range(40):  # reCAPTCHA takes longer
-                await asyncio.sleep(2)
-                async with self.session.get(
-                    f"{SOLVER_RECAPTCHA}/res.php",
-                    params={"key": "worker", "id": task_id},
-                    timeout=10
-                ) as resp:
-                    result = await resp.text()
-                    if result == "CAPCHA_NOT_READY":
-                        continue
-                    if result.startswith("OK|"):
-                        return result[3:]
-                    return None
-
-            return None
-        except Exception as e:
-            log.error(f"reCAPTCHA error: {e}")
-            return None
-
-    async def _solve_turnstile(self, task: dict) -> Optional[str]:
-        """Solve Cloudflare Turnstile using our dedicated solver."""
-        sitekey = task.get("sitekey", "")
-        pageurl = task.get("pageurl", "")
-
-        if not sitekey or not pageurl:
-            return None
-
-        try:
-            async with self.session.post(
-                f"{SOLVER_TURNSTILE}/in.php",
-                data={
-                    "key": "worker",
-                    "method": "turnstile",
-                    "sitekey": sitekey,
-                    "pageurl": pageurl,
-                },
-                timeout=30
-            ) as resp:
-                result = await resp.text()
-                if not result.startswith("OK|"):
-                    return None
-                task_id = result[3:]
-
-            for _ in range(40):
-                await asyncio.sleep(2)
-                async with self.session.get(
-                    f"{SOLVER_TURNSTILE}/res.php",
-                    params={"key": "worker", "id": task_id},
-                    timeout=10
-                ) as resp:
-                    result = await resp.text()
-                    if result == "CAPCHA_NOT_READY":
-                        continue
-                    if result.startswith("OK|"):
-                        return result[3:]
-                    return None
-
-            return None
-        except Exception as e:
-            log.error(f"Turnstile error: {e}")
-            return None
-
-    async def _solve_hcaptcha(self, task: dict) -> Optional[str]:
-        """Solve hCaptcha using our universal solver (hcaptcha-challenger)."""
-        sitekey = task.get("sitekey", "")
-        pageurl = task.get("pageurl", "")
-
-        if not sitekey or not pageurl:
-            return None
-
-        try:
-            async with self.session.post(
-                f"{SOLVER_UNIVERSAL}/in.php",
-                data={
-                    "key": "worker",
-                    "method": "hcaptcha",
-                    "sitekey": sitekey,
-                    "pageurl": pageurl,
-                },
-                timeout=30
-            ) as resp:
-                result = await resp.text()
-                if not result.startswith("OK|"):
-                    return None
-                task_id = result[3:]
-
-            for _ in range(40):
-                await asyncio.sleep(2)
-                async with self.session.get(
-                    f"{SOLVER_UNIVERSAL}/res.php",
-                    params={"key": "worker", "id": task_id},
-                    timeout=10
-                ) as resp:
-                    result = await resp.text()
-                    if result == "CAPCHA_NOT_READY":
-                        continue
-                    if result.startswith("OK|"):
-                        return result[3:]
-                    return None
-
-            return None
-        except Exception as e:
-            log.error(f"hCaptcha error: {e}")
-            return None
-
-    async def _solve_coord_captcha(self, task: dict) -> Optional[str]:
-        """Solve coordinate/click captcha using OCR detection."""
-        return await self._solve_image_captcha(task)
-
-    async def _submit_answer(self, captcha_id: str, answer: str) -> bool:
-        """Submit the answer back to 2captcha."""
-        # In worker mode, we submit via the cabinet API
-        # For now, this is a placeholder for the worker submission endpoint
-        # The actual submission depends on how the captcha was received
-        
-        # If we're working in proxy mode (customer submits, we solve),
-        # the answer is returned through res.php
-        
-        # If we're in worker mode, we submit to the cabinet
-        try:
-            # Try the rucaptcha worker endpoint
-            async with self.session.post(
-                f"{RUCAPTCHA_BASE}/res.php",
-                data={
-                    "key": CAPTCHA_KEY,
-                    "action": "answer",
-                    "id": captcha_id,
-                    "answer": answer,
-                },
-                timeout=10
-            ) as resp:
-                result = await resp.text()
-                return "OK" in result
-        except Exception:
-            return False
-
-    async def submit_captcha(self, captcha_type: str, **kwargs) -> Optional[dict]:
-        """
-        Submit a captcha for solving (customer proxy mode).
-        This allows the bot to also work as a solving service.
-        """
-        task = {
-            "id": f"task_{int(time.time() * 1000)}",
-            "type": captcha_type,
-            **kwargs
-        }
-        await self.captcha_queue.put(task)
-        return task
-
-    def get_live_stats(self) -> dict:
-        """Get live bot stats."""
-        return {
-            "running": self.running,
-            "total_solved": self.total_solved,
-            "total_failed": self.total_failed,
-            "total_earnings": self.total_earnings,
-            "current_balance": self.current_balance,
-            "queue_size": self.captcha_queue.qsize(),
-        }
-
-
-# ─── Standalone runner ───────────────────────────────────────
-
-async def main():
-    bot = WorkerBot()
-    try:
-        await bot.start()
-    except KeyboardInterrupt:
-        log.info("Shutting down...")
-        await bot.stop()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    async def withdraw(self, thash: str = "") -> dict:
+        """Request withdrawal (stub — 2captcha doesn't have worker API withdrawal)."""
+        return {"status": 0, "error": "Withdrawals must be done via 2captcha.com web interface"}

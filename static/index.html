@@ -3,492 +3,197 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>2Captcha Worker — Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<title>🤖 2Captcha Worker Dashboard</title>
 <style>
-:root{--bg:#0f172a;--card:rgba(30,41,59,.6);--border:rgba(148,163,184,.15);
---text:#e2e8f0;--muted:#64748b;--green:#22c55e;--cyan:#06b6d4;--red:#ef4444;
---yellow:#eab300;--purple:#a855f7}
+:root{--bg:#0a0e27;--card:#141938;--border:#2a3158;--text:#e0e0f0;--accent:#6366f1;--accent2:#8b5cf6;--green:#22c55e;--red:#ef4444;--yellow:#eab308;--gray:#6b7280}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
-overflow-x:hidden}
-.bg-glow{position:fixed;inset:0;pointer-events:none;z-index:-1}
-.bg-glow::before{content:'';position:absolute;width:800px;height:800px;border-radius:50%;
-background:radial-gradient(circle,rgba(34,197,94,.06) 0%,transparent 70%);
-top:-300px;right:-200px}
-.bg-glow::after{content:'';position:absolute;width:600px;height:600px;border-radius:50%;
-background:radial-gradient(circle,rgba(6,182,212,.06) 0%,transparent 70%);
-bottom:-200px;left:-200px}
-/* Nav */
-nav{background:rgba(15,23,42,.8);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);
-padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--green),var(--cyan));
--webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.nav-links{display:flex;gap:24px;align-items:center}
-.nav-links a{color:var(--muted);text-decoration:none;font-size:14px;transition:color .2s;cursor:pointer}
-.nav-links a:hover{color:var(--text)}
-.btn-sm{padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:transparent;
-color:var(--text);font-size:13px;cursor:pointer;transition:all .2s}
-.btn-sm:hover{background:rgba(148,163,184,.1)}
-.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
-.status-dot.running{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
-.status-dot.stopped{background:var(--red);opacity:.5}
-.status-dot.idle{background:var(--yellow);opacity:.7}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-/* Main */
-main{max-width:1400px;margin:0 auto;padding:24px 32px}
-/* Stat cards */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-bottom:24px}
-.stat-card{background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--border);
-border-radius:16px;padding:24px;position:relative;overflow:hidden;transition:transform .2s}
-.stat-card:hover{transform:translateY(-2px)}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
-background:linear-gradient(90deg,transparent,var(--accent,var(--green)),transparent)}
-.stat-label{font-size:13px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
-.stat-value{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
-.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.stat-icon{position:absolute;top:20px;right:20px;font-size:32px;opacity:.15}
-/* Sections */
-.section{background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--border);
-border-radius:16px;padding:24px;margin-bottom:24px}
-.section-title{font-size:16px;font-weight:600;margin-bottom:20px;display:flex;align-items:center;
-justify-content:space-between}
-/* Charts */
-.chart-container{position:relative;height:200px;width:100%}
-/* Table */
-table{width:100%;border-collapse:collapse}
-th{text-align:left;padding:12px 16px;font-size:12px;color:var(--muted);text-transform:uppercase;
-border-bottom:1px solid var(--border);font-weight:600}
-td{padding:12px 16px;font-size:14px;border-bottom:1px solid rgba(148,163,184,.08)}
-tr:hover{background:rgba(148,163,184,.03)}
-.badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;display:inline-block}
-.badge.solved{background:rgba(34,197,94,.15);color:var(--green)}
-.badge.failed{background:rgba(239,68,68,.15);color:var(--red)}
-.badge.processing{background:rgba(234,179,0,.15);color:var(--yellow)}
-/* Grid */
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-@media(max-width:768px){.grid-2{grid-template-columns:1fr}}
-/* Solver status */
-.solver-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
-.solver-card{background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:10px;
-padding:14px;transition:all .2s}
-.solver-card.ok{border-color:rgba(34,197,94,.3)}
-.solver-card.offline{border-color:rgba(239,68,68,.2);opacity:.6}
-.solver-name{font-size:13px;font-weight:600;margin-bottom:4px}
-.solver-status{font-size:11px;color:var(--muted)}
-.solver-card.ok .solver-status{color:var(--green)}
-.solver-card.offline .solver-status{color:var(--red)}
-/* Withdraw */
-.withdraw-box{text-align:center;padding:32px}
-.withdraw-amount{font-size:36px;font-weight:700;margin:16px 0}
-.btn-withdraw{padding:12px 32px;border-radius:10px;border:none;font-size:16px;font-weight:600;
-cursor:pointer;background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;transition:all .2s}
-.btn-withdraw:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(34,197,94,.3)}
-.btn-withdraw:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
-/* Settings */
-.setting-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;
-border-bottom:1px solid rgba(148,163,184,.08)}
-.setting-row:last-child{border-bottom:none}
-.setting-label{font-size:14px;font-weight:500}
-.setting-input{padding:8px 12px;background:rgba(15,23,42,.8);border:1px solid var(--border);
-border-radius:8px;color:var(--text);font-size:14px;width:300px}
-.setting-input:focus{outline:none;border-color:var(--green)}
-/* Timer */
-.timer{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
-/* Responsive */
-@media(max-width:640px){
-main{padding:16px}
-.stats-grid{grid-template-columns:1fr 1fr}
-}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+.nav{background:var(--card);padding:12px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border)}
+.nav h1{font-size:1.1rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.nav .tabs{display:flex;gap:4px;margin-left:auto}
+.nav .tabs a{padding:8px 16px;border-radius:8px;color:var(--gray);text-decoration:none;font-size:0.85rem;cursor:pointer}
+.nav .tabs a.active{background:var(--accent);color:#fff}
+.nav .tabs a:hover{color:#fff}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card .label{font-size:0.75rem;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
+.card .value{font-size:1.8rem;font-weight:700;margin-top:4px}
+.card .sub{font-size:0.75rem;color:var(--gray);margin-top:4px}
+.card.green .value{color:var(--green)}
+.card.yellow .value{color:var(--yellow)}
+.card.blue .value{color:var(--accent)}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.panel h2{font-size:1rem;margin-bottom:16px}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-danger{background:var(--red);color:#fff}
+.btn-success{background:var(--green);color:#fff}
+.btn:hover{opacity:0.9;transform:translateY(-1px)}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#1a1f42;color:#fff;font-size:0.85rem;box-sizing:border-box;margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:0.8rem}
+th{text-align:left;padding:10px;border-bottom:1px solid var(--border);color:var(--gray);font-weight:600}
+td{padding:10px;border-bottom:1px solid var(--border)}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:600}
+.badge-green{background:rgba(34,197,94,.2);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.2);color:var(--red)}
+.badge-yellow{background:rgba(234,179,8,.2);color:var(--yellow)}
+.account-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.account-row .info{flex:1}
+.account-row .info .name{font-weight:600}
+.account-row .info .email{font-size:0.75rem;color:var(--gray)}
+.account-row .stats{display:flex;gap:16px;font-size:0.75rem;color:var(--gray)}
+.hidden{display:none}
 </style>
 </head>
 <body>
-<div class="bg-glow"></div>
-
-<!-- Nav -->
-<nav>
-<div class="logo">🤖 2Captcha Worker</div>
-<div class="nav-links">
-<span><span class="status-dot" id="statusDot"></span><span id="statusText">Idle</span></span>
-<a onclick="loadPage('dashboard')">Dashboard</a>
-<a onclick="loadPage('solvers')">Solvers</a>
-<a onclick="loadPage('withdraw')">Withdraw</a>
-<a onclick="loadPage('settings')">Settings</a>
-<a href="/logout" style="color:var(--red)">Logout</a>
+<div class="nav">
+<h1>🤖 2Captcha Worker</h1>
+<div class="tabs">
+<a onclick="showTab('dash')" id="tab-dash" class="active">📊 Dashboard</a>
+<a onclick="showTab('accounts')" id="tab-accounts">👥 Accounts</a>
+<a onclick="showTab('settings')" id="tab-settings">⚙️ Settings</a>
 </div>
-</nav>
+</div>
+<div class="container">
 
-<!-- Main content -->
-<div id="content"></div>
+<!-- Dashboard Tab -->
+<div id="dash-tab">
+<div class="cards">
+<div class="card green"><div class="label">Earnings Today</div><div class="value" id="earnings-today">$0.00</div><div class="sub" id="solved-today">0 solved</div></div>
+<div class="card yellow"><div class="label">Total Balance</div><div class="value" id="total-balance">$0.00</div><div class="sub" id="account-count">0 accounts</div></div>
+<div class="card blue"><div class="label">Total Solved</div><div class="value" id="total-solved">0</div><div class="sub" id="success-rate">0% success</div></div>
+<div class="card"><div class="label">Avg Solve Time</div><div class="value" id="avg-solve">0ms</div><div class="sub">&nbsp;</div></div>
+</div>
+
+<div style="margin-bottom:16px">
+<button class="btn btn-primary" id="start-btn" onclick="startWorker()">▶ Start Worker</button>
+<button class="btn btn-danger hidden" id="stop-btn" onclick="stopWorker()">⏹ Stop Worker</button>
+<button class="btn btn-success" onclick="refreshBalance()">🔄 Refresh Balance</button>
+</div>
+
+<div class="panel">
+<h2>📋 Recent Activity</h2>
+<table><thead><tr><th>ID</th><th>Account</th><th>Type</th><th>Status</th><th>Reward</th><th>Time</th></tr></thead>
+<tbody id="recent-table"><tr><td colspan="6" style="text-align:center;color:var(--gray)">No activity yet</td></tr></tbody>
+</table>
+</div>
+
+<div class="panel">
+<h2>👥 Account Overview</h2>
+<div id="accounts-overview"></div>
+</div>
+</div>
+
+<!-- Accounts Tab -->
+<div id="accounts-tab" class="hidden">
+<div class="panel">
+<h2>Add 2Captcha Account</h2>
+<p style="font-size:0.8rem;color:var(--gray);margin-bottom:12px">Enter your 2captcha thash (found in the worker cabinet URL: <code style="color:var(--accent)">2captcha.com/captcha_api.php?...thash=YOUR_KEY</code>)</p>
+<input type="text" id="new-thash" placeholder="Paste thash here (32 characters)">
+<input type="text" id="new-label" placeholder="Account label (e.g. Account 1, Brian)">
+<button class="btn btn-primary" onclick="addAccount()">➕ Add Account</button>
+<div id="add-result" style="margin-top:8px;font-size:0.8rem"></div>
+</div>
+
+<div class="panel">
+<h2>Active Accounts</h2>
+<div id="accounts-list"></div>
+</div>
+</div>
+
+<!-- Settings Tab -->
+<div id="settings-tab" class="hidden">
+<div class="panel">
+<h2>Solver Endpoints</h2>
+<div id="solver-health"></div>
+</div>
+<div class="panel">
+<h2>Worker Settings</h2>
+<button class="btn btn-danger" onclick="logout()">Logout</button>
+</div>
+</div>
+
+</div>
 
 <script>
-let charts = {};
-let pollInterval = null;
-let currentPage = 'dashboard';
-
-// ─── Page Loader ──────────────────────────────────
-
-async function loadPage(page) {
-    currentPage = page;
-    const content = document.getElementById('content');
-    if (page === 'dashboard') content.innerHTML = dashboardHTML();
-    else if (page === 'solvers') content.innerHTML = solversHTML();
-    else if (page === 'withdraw') content.innerHTML = withdrawHTML();
-    else if (page === 'settings') content.innerHTML = settingsHTML();
-    
-    if (page === 'dashboard') {
-        await fetchStats();
-        await fetchBalance();
-        pollInterval = setInterval(async () => {
-            await fetchStats();
-            await fetchBalance();
-        }, 5000);
-    } else {
-        clearInterval(pollInterval);
-    }
-    
-    if (page === 'solvers') fetchSolverHealth();
-    if (page === 'withdraw') fetchBalance();
-    if (page === 'settings') fetchSettings();
+async function api(path,method='GET',body=null){
+const opts={method,headers:{'Content-Type':'application/json'}};
+if(body)opts.body=JSON.stringify(body);
+const r=await fetch('/api/'+path,opts);
+return r.json();
 }
 
-// ─── Dashboard page ───────────────────────────────
-
-function dashboardHTML() {
-    return `
-    <main>
-    <div class="stats-grid">
-        <div class="stat-card" style="--accent:var(--green)">
-            <div class="stat-label">💰 Earnings Today</div>
-            <div class="stat-value" id="earningsToday" style="color:var(--green)">$0.0000</div>
-            <div class="stat-sub" id="solvedToday">0 captchas solved</div>
-            <div class="stat-icon">💵</div>
-        </div>
-        <div class="stat-card" style="--accent:var(--cyan)">
-            <div class="stat-label">🏦 Total Balance</div>
-            <div class="stat-value" id="totalBalance" style="color:var(--cyan)">$0.00</div>
-            <div class="stat-sub" id="balanceSource">Loading...</div>
-            <div class="stat-icon">🏦</div>
-        </div>
-        <div class="stat-card" style="--accent:var(--yellow)">
-            <div class="stat-label">✅ Total Solved</div>
-            <div class="stat-value" id="totalSolved">0</div>
-            <div class="stat-sub" id="successRate">0% success rate</div>
-            <div class="stat-icon">✅</div>
-        </div>
-        <div class="stat-card" style="--accent:var(--purple)">
-            <div class="stat-label">⚡ Avg Solve Time</div>
-            <div class="stat-value" id="avgSolveTime">0ms</div>
-            <div class="stat-sub" id="totalEarnings">Total: $0.0000</div>
-            <div class="stat-icon">⚡</div>
-        </div>
-    </div>
-
-    <div class="grid-2">
-        <div class="section">
-            <div class="section-title">📈 Earnings (24h)</div>
-            <div class="chart-container"><canvas id="earningsChart"></canvas></div>
-        </div>
-        <div class="section">
-            <div class="section-title">🎯 Captchas by Type</div>
-            <div class="chart-container"><canvas id="typeChart"></canvas></div>
-        </div>
-    </div>
-
-    <div class="section">
-        <div class="section-title">📋 Recent Activity</div>
-        <table>
-            <thead><tr><th>Captcha ID</th><th>Type</th><th>Status</th><th>Reward</th><th>Solve Time</th><th>Time</th></tr></thead>
-            <tbody id="recentTable"><tr><td colspan="6" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
-        </table>
-    </div>
-
-    <div style="text-align:center;padding:16px">
-        <button class="btn-sm" onclick="toggleWorker()" id="toggleBtn">▶ Start Worker</button>
-    </div>
-    </main>`;
+function showTab(t){
+['dash','accounts','settings'].forEach(x=>{document.getElementById(x+'-tab').classList.toggle('hidden',x!==t);document.getElementById('tab-'+x).classList.toggle('active',x===t);});
 }
 
-// ─── Fetch stats ───────────────────────────────────
+async function updateStats(){
+try{
+const s=await api('stats');
+document.getElementById('earnings-today').textContent='$'+(s.earnings_today||0).toFixed(4);
+document.getElementById('solved-today').textContent=(s.solved_today||0)+' solved';
+document.getElementById('total-balance').textContent='$'+(s.total_balance||0).toFixed(4);
+document.getElementById('account-count').textContent=(s.account_count||0)+' accounts, '+(s.active_accounts||0)+' active';
+document.getElementById('total-solved').textContent=s.total_solved||0;
+const rate=s.total_solved?Math.round(s.total_solved/((s.total_solved||0)+(s.total_failed||0))*100):0;
+document.getElementById('success-rate').textContent=rate+'% success';
 
-async function fetchStats() {
-    try {
-        const resp = await fetch('/api/stats');
-        if (resp.status === 401) { window.location = '/login'; return; }
-        const data = await resp.json();
-        
-        // Update cards
-        document.getElementById('earningsToday').textContent = '$' + (data.earnings_today || 0).toFixed(4);
-        document.getElementById('solvedToday').textContent = (data.solved_today || 0) + ' captchas solved';
-        document.getElementById('totalSolved').textContent = data.total_solved || 0;
-        document.getElementById('successRate').textContent = (data.success_rate || 0) + '% success rate';
-        document.getElementById('avgSolveTime').textContent = (data.avg_solve_ms || 0) + 'ms';
-        document.getElementById('totalEarnings').textContent = 'Total: $' + (data.total_earnings || 0).toFixed(4);
-        document.getElementById('totalBalance').textContent = '$' + (data.balance || 0).toFixed(4);
-        document.getElementById('balanceSource').textContent = data.running ? 'Worker running' : 'Worker stopped';
-        
-        // Status indicator
-        const dot = document.getElementById('statusDot');
-        const text = document.getElementById('statusText');
-        const btn = document.getElementById('toggleBtn');
-        if (data.running) {
-            dot.className = 'status-dot running';
-            text.textContent = 'Running';
-            if (btn) btn.textContent = '⏹ Stop Worker';
-        } else {
-            dot.className = 'status-dot stopped';
-            text.textContent = 'Stopped';
-            if (btn) btn.textContent = '▶ Start Worker';
-        }
-        
-        // Recent activity
-        if (data.recent && data.recent.length > 0) {
-            const tbody = document.getElementById('recentTable');
-            if (tbody) {
-                tbody.innerHTML = data.recent.map(r => `
-                    <tr>
-                        <td style="font-family:monospace;font-size:12px">${r.captcha_id || '—'}</td>
-                        <td>${r.captcha_type || '—'}</td>
-                        <td><span class="badge ${r.status}">${r.status}</span></td>
-                        <td style="color:var(--green)">$${(r.reward || 0).toFixed(6)}</td>
-                        <td>${(r.solve_ms || 0) > 0 ? r.solve_ms + 'ms' : '—'}</td>
-                        <td style="font-size:12px;color:var(--muted)">${r.solved_at || '—'}</td>
-                    </tr>
-                `).join('');
-            }
-        }
-        
-        // Update charts
-        if (data.hourly && data.hourly.length > 0) {
-            updateEarningsChart(data.hourly);
-        }
-        if (data.by_type) {
-            updateTypeChart(data.by_type);
-        }
-    } catch (e) { console.error('Stats error:', e); }
+// Recent
+let html='';
+if(s.recent&&s.recent.length){
+s.recent.forEach(r=>{
+const cls=r.status==='solved'?'badge-green':'badge-red';
+html+=`<tr><td>${r.captcha_id}</td><td>${r.account_label||'-'}</td><td>${r.captcha_type}</td><td><span class="badge ${cls}">${r.status}</span></td><td>$${(r.reward||0).toFixed(5)}</td><td>${r.solve_time_ms||0}ms</td></tr>`;
+});
+}else{html='<tr><td colspan="6" style="text-align:center;color:var(--gray)">No activity yet</td></tr>';}
+document.getElementById('recent-table').innerHTML=html;
+
+// Accounts overview
+let ahtml='';
+if(s.accounts&&s.accounts.length){
+s.accounts.forEach(a=>{
+const st=a.running?'<span class="badge badge-green">Active</span>':'<span class="badge badge-yellow">Idle</span>';
+ahtml+=`<div class="account-row"><div class="info"><div class="name">${a.label}</div><div class="email">${a.email||a.thash.slice(0,8)+'...'}</div></div><div class="stats"><span>💰 $${a.balance.toFixed(5)}</span><span>✅ ${a.solved}</span><span>❌ ${a.failed}</span><span>$${a.earnings.toFixed(5)}</span></div><div>${st}</div></div>`;
+});
+}else{ahtml='<p style="color:var(--gray)">No accounts configured</p>';}
+document.getElementById('accounts-overview').innerHTML=ahtml;
+}catch(e){console.error(e);}
 }
 
-async function fetchBalance() {
-    try {
-        const resp = await fetch('/api/balance');
-        const data = await resp.json();
-        const el = document.getElementById('totalBalance');
-        if (el) { el.textContent = '$' + (data.balance || 0).toFixed(4); }
-        const src = document.getElementById('balanceSource');
-        if (src) { src.textContent = data.balance_source === 'live' ? 'Live from 2captcha' : 'Cached value'; }
-    } catch (e) {}
+async function updateAccounts(){
+try{
+const r=await api('accounts');
+let html='';
+if(r.accounts&&r.accounts.length){
+r.accounts.forEach(a=>{
+const st=a.running?'<span class="badge badge-green">Active</span>':'<span class="badge badge-yellow">Idle</span>';
+html+=`<div class="account-row"><div class="info"><div class="name">${a.label}</div><div class="email">${a.email||a.thash.slice(0,8)+'...'}</div></div><div class="stats"><span>💰 $${a.balance.toFixed(5)}</span><span>✅ ${a.solved} solved</span><span>$${a.earnings.toFixed(5)} earned</span></div><div>${st}</div><div><button class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem" onclick="removeAccount('${a.thash}')">Remove</button></div></div>`;
+});
+}else{html='<p style="color:var(--gray)">No accounts yet. Add one above.</p>';}
+document.getElementById('accounts-list').innerHTML=html;
+}catch(e){console.error(e);}
 }
 
-// ─── Charts ────────────────────────────────────────
-
-function updateEarningsChart(hourly) {
-    const ctx = document.getElementById('earningsChart');
-    if (!ctx) return;
-    const labels = hourly.map(h => h.hour + ':00');
-    const data = hourly.map(h => parseFloat(h.earnings).toFixed(4));
-    
-    if (charts.earnings) charts.earnings.destroy();
-    charts.earnings = new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets: [{
-            label: 'Earnings ($)', data, borderColor: '#22c55e',
-            backgroundColor: 'rgba(34,197,94,.1)', fill: true, tension: 0.4
-        }]},
-        options: { responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { display: false }, y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(148,163,184,.05)' } } } }
-    });
+async function startWorker(){await api('start','POST');document.getElementById('start-btn').classList.add('hidden');document.getElementById('stop-btn').classList.remove('hidden');}
+async function stopWorker(){await api('stop','POST');document.getElementById('stop-btn').classList.add('hidden');document.getElementById('start-btn').classList.remove('hidden');}
+async function refreshBalance(){await api('balance','GET');updateStats();}
+async function addAccount(){
+const thash=document.getElementById('new-thash').value.trim();
+const label=document.getElementById('new-label').value.trim()||'Account';
+const r=await api('accounts/add','POST',{thash,label});
+const el=document.getElementById('add-result');
+if(r.error){el.innerHTML='<span style="color:var(--red)">❌ '+r.error+'</span>';}
+else{el.innerHTML='<span style="color:var(--green)">✅ Added: '+r.account.email+' (Balance: $'+r.account.balance+')</span>';document.getElementById('new-thash').value='';document.getElementById('new-label').value='';}
+updateAccounts();updateStats();
 }
+async function removeAccount(thash){await api('accounts/remove','POST',{thash});updateAccounts();updateStats();}
+async function updateHealth(){const r=await api('solver-health');let html='<table>';for(const[n,v]of Object.entries(r)){html+=`<tr><td style="text-transform:capitalize">${n.replace('_',' ')}</td><td>${v.online?'<span class="badge badge-green">Online</span>':'<span class="badge badge-red">Offline</span>'}</td><td style="font-size:0.75rem;color:var(--gray)">${v.url}</td></tr>`;}document.getElementById('solver-health').innerHTML=html+'</table>';}
+function logout(){window.location='/logout';}
 
-function updateTypeChart(byType) {
-    const ctx = document.getElementById('typeChart');
-    if (!ctx) return;
-    const labels = Object.keys(byType);
-    const data = labels.map(k => byType[k].count);
-    if (data.length === 0) return;
-    
-    if (charts.type) charts.type.destroy();
-    charts.type = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels, datasets: [{
-            data,
-            backgroundColor: ['#22c55e','#06b6d4','#eab300','#a855f7','#ef4444','#f97316','#3b82f6','#ec4899']
-        }]},
-        options: { responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } } } }
-    });
-}
-
-// ─── Solvers page ──────────────────────────────────
-
-function solversHTML() {
-    return `
-    <main>
-    <div class="section">
-        <div class="section-title">🔧 Solver Fleet Health</div>
-        <div class="solver-grid" id="solverGrid">
-            <div class="solver-card" style="text-align:center;color:var(--muted)">Checking...</div>
-        </div>
-    </div>
-    <div class="section">
-        <div class="section-title">⚡ Speed Benchmarks</div>
-        <table>
-            <thead><tr><th>Solver</th><th>Port</th><th>Type</th><th>Best Time</th><th>Status</th></tr></thead>
-            <tbody>
-                <tr><td>Universal OCR (ddddocr + Tesseract)</td><td>8855</td><td>Image/Base64</td><td>~1,100ms</td><td>✅ Running (3 weeks)</td></tr>
-                <tr><td>Turnstile Solver v2 (nodriver + camoufox)</td><td>8878</td><td>Cloudflare Turnstile</td><td>~8,200ms</td><td>✅ Running (3 weeks)</td></tr>
-                <tr><td>reCAPTCHA v2 (Playwright + CaptchaPlugin)</td><td>8866</td><td>reCAPTCHA v2</td><td>~2,200ms</td><td>✅ Running (4 weeks)</td></tr>
-                <tr><td>Cloudflare JSD (Go/Fiber)</td><td>8191</td><td>JSD Challenges</td><td>~65ms</td><td>✅ Running (new)</td></tr>
-                <tr><td>xCaptcha Solver</td><td>internal</td><td>xCaptcha</td><td>—</td><td>✅ Running (4 weeks)</td></tr>
-                <tr><td>Extension Universal (json=1)</td><td>8844</td><td>All types</td><td>—</td><td>✅ Running (3 weeks)</td></tr>
-                <tr><td>Extension reCAPTCHA (json=1)</td><td>8833</td><td>reCAPTCHA v2</td><td>—</td><td>✅ Running (4 weeks)</td></tr>
-                <tr><td>Extension Turnstile (json=1)</td><td>8822</td><td>Turnstile</td><td>—</td><td>✅ Running (3 weeks)</td></tr>
-            </tbody>
-        </table>
-    </div>
-    </main>`;
-}
-
-async function fetchSolverHealth() {
-    try {
-        const resp = await fetch('/api/solver-health');
-        const data = await resp.json();
-        const grid = document.getElementById('solverGrid');
-        if (!grid) return;
-        
-        const icons = { universal_ocr: '🔤', turnstile: '🛡️', recaptcha_v2: '🔐', cloudflare_jsd: '☁️' };
-        const names = { universal_ocr: 'Universal OCR', turnstile: 'Turnstile v2', recaptcha_v2: 'reCAPTCHA v2', cloudflare_jsd: 'Cloudflare JSD' };
-        
-        grid.innerHTML = Object.entries(data).map(([key, info]) => {
-            const isOk = info.status === 'ok';
-            return `<div class="solver-card ${isOk ? 'ok' : 'offline'}">
-                <div class="solver-name">${icons[key] || '🔧'} ${names[key] || key}</div>
-                <div class="solver-status">${isOk ? '● Online' : '● Offline'}</div>
-                ${info.details && info.details.solved !== undefined ? `<div class="solver-status" style="margin-top:4px">Solved: ${info.details.solved} | Active: ${info.details.active || 0}</div>` : ''}
-                ${info.error ? `<div class="solver-status" style="color:var(--red);font-size:10px;margin-top:4px">${info.error}</div>` : ''}
-            </div>`;
-        }).join('');
-    } catch (e) { console.error(e); }
-}
-
-// ─── Withdraw page ─────────────────────────────────
-
-function withdrawHTML() {
-    return `
-    <main>
-    <div class="section withdraw-box">
-        <div style="font-size:18px;font-weight:600;margin-bottom:8px">💸 Withdraw Earnings</div>
-        <div style="color:var(--muted);font-size:14px;margin-bottom:24px">Request a payout from your 2captcha worker balance</div>
-        <div class="withdraw-amount" id="withdrawBalance" style="color:var(--green)">$0.00</div>
-        <div style="color:var(--muted);font-size:13px;margin-bottom:24px" id="withdrawInfo">Fetching balance...</div>
-        <button class="btn-withdraw" id="withdrawBtn" onclick="requestWithdraw()" disabled>Request Withdrawal</button>
-        <div id="withdrawResult" style="margin-top:20px;display:none"></div>
-    </div>
-    </main>`;
-}
-
-async function requestWithdraw() {
-    const btn = document.getElementById('withdrawBtn');
-    const result = document.getElementById('withdrawResult');
-    btn.disabled = true;
-    btn.textContent = 'Processing...';
-    
-    try {
-        const resp = await fetch('/api/withdraw', { method: 'POST' });
-        const data = await resp.json();
-        
-        result.style.display = 'block';
-        if (data.error) {
-            result.innerHTML = `<div style="color:var(--red);padding:16px;background:rgba(239,68,68,.1);border-radius:10px">❌ ${data.error}</div>`;
-        } else {
-            result.innerHTML = `<div style="color:var(--green);padding:16px;background:rgba(34,197,94,.1);border-radius:10px">
-                ✅ Withdrawal requested!<br>
-                <span style="font-size:13px">Amount: $${(data.amount || 0).toFixed(4)} | ID: ${data.withdraw_id} | Status: ${data.status}</span>
-            </div>`;
-        }
-    } catch (e) {
-        result.style.display = 'block';
-        result.innerHTML = `<div style="color:var(--red)">Error: ${e.message}</div>`;
-    }
-    
-    btn.disabled = false;
-    btn.textContent = 'Request Withdrawal';
-    await fetchBalance();
-}
-
-// ─── Settings page ─────────────────────────────────
-
-function settingsHTML() {
-    return `
-    <main>
-    <div class="section" style="max-width:600px">
-        <div class="section-title">⚙️ Worker Settings</div>
-        <div id="settingsContent"><div style="text-align:center;color:var(--muted)">Loading settings...</div></div>
-    </div>
-    </main>`;
-}
-
-async function fetchSettings() {
-    try {
-        const resp = await fetch('/api/settings');
-        const data = await resp.json();
-        const content = document.getElementById('settingsContent');
-        if (!content) return;
-        
-        content.innerHTML = `
-            <div class="setting-row">
-                <div class="setting-label">2Captcha API Key</div>
-                <input class="setting-input" id="setKey" value="${data.captcha_key_full || ''}" placeholder="32-char key">
-            </div>
-            <div class="setting-row">
-                <div class="setting-label">Poll Interval (sec)</div>
-                <input class="setting-input" id="setInterval" value="${data.poll_interval || '1.0'}" type="number" step="0.5">
-            </div>
-            <div class="setting-row"><div class="setting-label">Universal OCR Solver</div><div style="color:var(--muted)">${data.solver_universal}</div></div>
-            <div class="setting-row"><div class="setting-label">Turnstile Solver</div><div style="color:var(--muted)">${data.solver_turnstile}</div></div>
-            <div class="setting-row"><div class="setting-label">reCAPTCHA Solver</div><div style="color:var(--muted)">${data.solver_recaptcha}</div></div>
-            <div class="setting-row"><div class="setting-label">Cloudflare JSD Solver</div><div style="color:var(--muted)">${data.solver_jsd}</div></div>
-            <div style="margin-top:20px;text-align:right">
-                <button class="btn-sm" onclick="saveSettings()">Save Settings</button>
-            </div>
-        `;
-    } catch (e) { console.error(e); }
-}
-
-async function saveSettings() {
-    const key = document.getElementById('setKey').value;
-    const interval = document.getElementById('setInterval').value;
-    try {
-        await fetch('/api/settings', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ captcha_key: key, poll_interval: interval })
-        });
-        alert('Settings saved!');
-    } catch (e) { alert('Error: ' + e.message); }
-}
-
-// ─── Worker toggle ─────────────────────────────────
-
-async function toggleWorker() {
-    const btn = document.getElementById('toggleBtn');
-    const dot = document.getElementById('statusDot');
-    if (dot.className.includes('running')) {
-        await fetch('/api/stop', { method: 'POST' });
-        btn.textContent = '▶ Start Worker';
-        dot.className = 'status-dot stopped';
-        document.getElementById('statusText').textContent = 'Stopped';
-    } else {
-        await fetch('/api/start', { method: 'POST' });
-        btn.textContent = '⏹ Stop Worker';
-        dot.className = 'status-dot running';
-        document.getElementById('statusText').textContent = 'Running';
-    }
-}
-
-// ─── Init ──────────────────────────────────────────
-
-loadPage('dashboard');
+updateStats();updateAccounts();updateHealth();
+setInterval(updateStats,5000);
+setInterval(updateAccounts,10000);
 </script>
 </body>
 </html>
