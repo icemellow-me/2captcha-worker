@@ -76,9 +76,11 @@ class AccountInfo:
     failed: int = 0
     earnings: float = 0.0
     running: bool = False
+    status: str = "idle"  # idle, polling, training, banned, parallel, error
     last_captcha_id: str = ""
     last_captcha_type: str = ""
     last_solve_time_ms: int = 0
+    last_error: str = ""
     history: List[dict] = field(default_factory=list)
 
 
@@ -127,6 +129,8 @@ class WorkerBot:
             "failed": a.failed,
             "earnings": round(a.earnings, 6),
             "running": a.running,
+            "status": a.status,
+            "last_error": a.last_error,
             "last_captcha_id": a.last_captcha_id,
             "last_captcha_type": a.last_captcha_type,
             "last_solve_time_ms": a.last_solve_time_ms,
@@ -557,6 +561,7 @@ class WorkerBot:
         """Main polling loop for a single account."""
         info.running = True
         log.info(f"🔄 [{info.label}] Polling for captchas...")
+        info.status = "polling"
         training_in_progress = False
         last_parallel_check = 0
         while self.running and not self._stop_event.is_set():
@@ -567,26 +572,35 @@ class WorkerBot:
                 if error_code == "TRAINING":
                     if not TRAINING_AVAILABLE:
                         log.error(f"📋 [{info.label}] Training required but module not available — will retry in 60s")
+                        info.status = "error"
+                        info.last_error = "Training required but module not available"
                         await asyncio.sleep(60)
                         continue
                     if training_in_progress:
                         await asyncio.sleep(30)
                         continue
                     training_in_progress = True
+                    info.status = "training"
                     log.info(f"📚 [{info.label}] Starting auto-training...")
                     result = await complete_training(self.session)
                     training_in_progress = False
                     if result.get("success"):
                         log.info(f"✅ [{info.label}] Training completed! Level: {result.get('level', '?')}")
+                        info.status = "polling"
+                        info.last_error = ""
                         # Re-login to refresh status
                         await self._login(info)
                     else:
                         log.error(f"❌ [{info.label}] Training failed: {result.get('error', 'unknown')}")
+                        info.status = "error"
+                        info.last_error = f"Training failed: {result.get('error', 'unknown')}"
                         await asyncio.sleep(60)
                     continue
                 
                 elif error_code == "PARALLEL":
                     now = time.time()
+                    info.status = "parallel"
+                    info.last_error = "Parallel usage detected"
                     if now - last_parallel_check > 60:
                         log.warning(f"⚠️ [{info.label}] Parallel usage — another session may be active. Waiting 60s...")
                         last_parallel_check = now
@@ -595,6 +609,8 @@ class WorkerBot:
                 
                 elif error_code == "BANNED":
                     log.error(f"🚫 [{info.label}] Account is banned. Suspending this account's loop.")
+                    info.status = "banned"
+                    info.last_error = "Account banned — waiting for moderator review"
                     info.running = False
                     return
                 
