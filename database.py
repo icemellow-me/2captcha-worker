@@ -43,6 +43,7 @@ async def init_db():
                 failed INTEGER DEFAULT 0,
                 earnings REAL DEFAULT 0.0,
                 running INTEGER DEFAULT 0,
+                paused INTEGER DEFAULT 0,
                 created_at REAL DEFAULT 0
             );
 
@@ -55,12 +56,59 @@ async def init_db():
                 created_at REAL DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS worker_state (
+                key TEXT PRIMARY KEY,
+                value TEXT DEFAULT '',
+                updated_at REAL DEFAULT 0
+            );
+
             CREATE INDEX IF NOT EXISTS idx_captchas_type ON captchas(captcha_type);
             CREATE INDEX IF NOT EXISTS idx_captchas_status ON captchas(status);
             CREATE INDEX IF NOT EXISTS idx_captchas_created ON captchas(created_at);
             CREATE INDEX IF NOT EXISTS idx_captchas_account ON captchas(account_label);
         """)
+        # Add paused column to existing accounts table if missing
+        try:
+            await db.execute("ALTER TABLE accounts ADD COLUMN paused INTEGER DEFAULT 0")
+        except Exception:
+            pass  # Column already exists
         await db.commit()
+
+
+# ─── Worker State Persistence ────────────────────────────────
+
+async def set_worker_state(key: str, value: str):
+    """Persist a key-value state (e.g. worker_running=true)."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute(
+            "INSERT INTO worker_state (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=?, updated_at=?",
+            (key, value, time.time(), value, time.time())
+        )
+        await db.commit()
+
+
+async def get_worker_state(key: str, default: str = "") -> str:
+    """Read a persisted state value."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        cursor = await db.execute("SELECT value FROM worker_state WHERE key=?", (key,))
+        row = await cursor.fetchone()
+        return row[0] if row else default
+
+
+async def set_account_paused(thash: str, paused: bool):
+    """Persist pause state for an account."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        await db.execute("UPDATE accounts SET paused=? WHERE thash=?", (1 if paused else 0, thash))
+        await db.commit()
+
+
+async def get_account_paused(thash: str) -> bool:
+    """Check if an account is paused (from DB)."""
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        cursor = await db.execute("SELECT paused FROM accounts WHERE thash=?", (thash,))
+        row = await cursor.fetchone()
+        return bool(row[0]) if row else False
 
 
 async def save_account(thash, label="", email="", user_id=0, balance=0.0, reputation=0.0):

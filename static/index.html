@@ -2,48 +2,149 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>🤖 2Captcha Worker Dashboard</title>
 <style>
-:root{--bg:#0a0e27;--card:#141938;--border:#2a3158;--text:#e0e0f0;--accent:#6366f1;--accent2:#8b5cf6;--green:#22c55e;--red:#ef4444;--yellow:#eab308;--gray:#6b7280}
+:root{
+--bg:#0a0e27;--card:#141938;--border:#2a3158;--text:#e0e0f0;
+--accent:#6366f1;--accent2:#8b5cf6;
+--green:#22c55e;--red:#ef4444;--yellow:#eab308;--gray:#6b7280;
+--orange:#f97316;--blue:#3b82f6;
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
-.nav{background:var(--card);padding:12px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border)}
-.nav h1{font-size:1.1rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+html{font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh;-webkit-text-size-adjust:100%}
+
+/* ─── Nav ─── */
+.nav{background:var(--card);padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.nav h1{font-size:1rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
 .nav .tabs{display:flex;gap:4px;margin-left:auto}
-.nav .tabs a{padding:8px 16px;border-radius:8px;color:var(--gray);text-decoration:none;font-size:0.85rem;cursor:pointer}
+.nav .tabs a{padding:6px 12px;border-radius:6px;color:var(--gray);text-decoration:none;font-size:0.8rem;cursor:pointer;transition:all .2s}
 .nav .tabs a.active{background:var(--accent);color:#fff}
 .nav .tabs a:hover{color:#fff}
-.container{max-width:1200px;margin:0 auto;padding:24px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:24px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
-.card .label{font-size:0.75rem;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
-.card .value{font-size:1.8rem;font-weight:700;margin-top:4px}
-.card .sub{font-size:0.75rem;color:var(--gray);margin-top:4px}
+
+/* ─── Layout ─── */
+.container{max-width:1200px;margin:0 auto;padding:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.card .label{font-size:0.7rem;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
+.card .value{font-size:1.4rem;font-weight:700;margin-top:4px}
+.card .sub{font-size:0.7rem;color:var(--gray);margin-top:4px}
 .card.green .value{color:var(--green)}
 .card.yellow .value{color:var(--yellow)}
 .card.blue .value{color:var(--accent)}
-.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
-.panel h2{font-size:1rem;margin-bottom:16px}
-.btn{padding:10px 20px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem;transition:all .2s}
+
+/* ─── Panels ─── */
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.panel h2{font-size:0.95rem;margin-bottom:12px}
+
+/* ─── Buttons ─── */
+.btn{padding:8px 16px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.8rem;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
 .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
 .btn-danger{background:var(--red);color:#fff}
 .btn-success{background:var(--green);color:#fff}
-.btn:hover{opacity:0.9;transform:translateY(-1px)}
+.btn-warning{background:var(--orange);color:#fff}
+.btn-secondary{background:#2a3158;color:var(--text)}
+.btn:hover{opacity:0.85;transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.btn-sm{padding:4px 10px;font-size:0.72rem}
+
+/* ─── Controls Bar ─── */
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center}
+.controls .spacer{flex:1}
+
+/* ─── Status Badge ─── */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600;white-space:nowrap}
+.badge-green{background:rgba(34,197,94,.2);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge-red{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.badge-yellow{background:rgba(234,179,8,.2);color:var(--yellow);border:1px solid rgba(234,179,8,.3)}
+.badge-gray{background:rgba(107,114,128,.2);color:var(--gray);border:1px solid rgba(107,114,128,.3)}
+.badge-blue{background:rgba(59,130,246,.2);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+.badge-orange{background:rgba(249,115,22,.2);color:var(--orange);border:1px solid rgba(249,115,22,.3)}
+
+/* ─── Tables ─── */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:0.75rem;min-width:500px}
+th{text-align:left;padding:8px;border-bottom:1px solid var(--border);color:var(--gray);font-weight:600;white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--border);white-space:nowrap}
+
+/* ─── Account Rows ─── */
+.account-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.account-row .info{flex:1;min-width:120px}
+.account-row .info .name{font-weight:600;font-size:0.85rem}
+.account-row .info .email{font-size:0.7rem;color:var(--gray);margin-top:2px}
+.account-row .info .status-line{font-size:0.68rem;color:var(--gray);margin-top:3px}
+.account-row .stats{display:flex;gap:10px;font-size:0.68rem;color:var(--gray);flex-wrap:wrap}
+.account-row .actions{display:flex;gap:4px;flex-wrap:wrap}
+
+/* ─── Forms ─── */
 input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#1a1f42;color:#fff;font-size:0.85rem;box-sizing:border-box;margin-bottom:8px}
-table{width:100%;border-collapse:collapse;font-size:0.8rem}
-th{text-align:left;padding:10px;border-bottom:1px solid var(--border);color:var(--gray);font-weight:600}
-td{padding:10px;border-bottom:1px solid var(--border)}
-.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:600}
-.badge-green{background:rgba(34,197,94,.2);color:var(--green)}
-.badge-red{background:rgba(239,68,68,.2);color:var(--red)}
-.badge-yellow{background:rgba(234,179,8,.2);color:var(--yellow)}
-.account-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.account-row .info{flex:1}
-.account-row .info .name{font-weight:600}
-.account-row .info .email{font-size:0.75rem;color:var(--gray)}
-.account-row .stats{display:flex;gap:16px;font-size:0.75rem;color:var(--gray)}
+input:focus{outline:none;border-color:var(--accent)}
+
+/* ─── Responsive Grid ─── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+
 .hidden{display:none}
+
+/* ─── Status Indicator Dot ─── */
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot-green{background:var(--green);box-shadow:0 0 4px var(--green)}
+.dot-red{background:var(--red);box-shadow:0 0 4px var(--red)}
+.dot-yellow{background:var(--yellow);box-shadow:0 0 4px var(--yellow)}
+.dot-gray{background:var(--gray)}
+.dot-orange{background:var(--orange);box-shadow:0 0 4px var(--orange)}
+
+/* ─── Mobile Breakpoints ─── */
+@media (max-width:768px){
+    .nav{padding:8px 12px;gap:8px}
+    .nav h1{font-size:0.9rem}
+    .nav .tabs a{padding:5px 10px;font-size:0.72rem}
+    .container{padding:12px}
+    .cards{grid-template-columns:repeat(2,1fr);gap:8px}
+    .card{padding:12px}
+    .card .value{font-size:1.1rem}
+    .card .label{font-size:0.65rem}
+    .card .sub{font-size:0.65rem}
+    .panel{padding:12px}
+    .panel h2{font-size:0.85rem}
+    .btn{padding:7px 12px;font-size:0.75rem}
+    .btn-sm{padding:5px 8px;font-size:0.68rem}
+    .controls{gap:6px}
+    .account-row{gap:6px}
+    .account-row .stats{font-size:0.62rem;gap:6px}
+    .grid-2{grid-template-columns:1fr}
+    .grid-3{grid-template-columns:1fr}
+    table{font-size:0.68rem}
+    th,td{padding:6px}
+}
+
+@media (max-width:480px){
+    .nav{padding:6px 10px}
+    .nav h1{font-size:0.82rem}
+    .nav .tabs{width:100%;margin-left:0;justify-content:center}
+    .nav .tabs a{padding:5px 8px;font-size:0.68rem}
+    .cards{grid-template-columns:1fr 1fr;gap:6px}
+    .card{padding:10px}
+    .card .value{font-size:1rem}
+    .container{padding:8px}
+    .panel{padding:10px}
+    .controls{flex-direction:column;align-items:stretch}
+    .controls .btn{width:100%;justify-content:center}
+    .controls .spacer{display:none}
+    .account-row{flex-direction:column;align-items:flex-start;gap:8px}
+    .account-row .actions{width:100%;justify-content:flex-start}
+    .account-row .actions .btn{flex:1;text-align:center}
+}
+
+/* ─── Worker Status Banner ─── */
+.worker-banner{padding:10px 16px;border-radius:8px;text-align:center;font-weight:600;font-size:0.85rem;margin-bottom:12px;transition:all .3s}
+.worker-banner.running{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.worker-banner.stopped{background:rgba(107,114,128,.15);border:1px solid rgba(107,114,128,.3);color:var(--gray)}
+.worker-banner.paused{background:rgba(249,115,22,.15);border:1px solid rgba(249,115,22,.3);color:var(--orange)}
+.worker-banner .pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 </style>
 </head>
 <body>
@@ -57,26 +158,37 @@ td{padding:10px;border-bottom:1px solid var(--border)}
 </div>
 <div class="container">
 
-<!-- Dashboard Tab -->
+<!-- ═══ Dashboard Tab ═══ -->
 <div id="dash-tab">
 <div class="cards">
 <div class="card green"><div class="label">Earnings Today</div><div class="value" id="earnings-today">$0.00</div><div class="sub" id="solved-today">0 solved</div></div>
 <div class="card yellow"><div class="label">Total Balance</div><div class="value" id="total-balance">$0.00</div><div class="sub" id="account-count">0 accounts</div></div>
 <div class="card blue"><div class="label">Total Solved</div><div class="value" id="total-solved">0</div><div class="sub" id="success-rate">0% success</div></div>
-<div class="card"><div class="label">Avg Solve Time</div><div class="value" id="avg-solve">0ms</div><div class="sub">&nbsp;</div></div>
+<div class="card"><div class="label">Avg Solve Time</div><div class="value" id="avg-solve">0ms</div><div class="sub" id="active-count">0 active</div></div>
 </div>
 
-<div style="margin-bottom:16px">
-<button class="btn btn-primary" id="start-btn" onclick="startWorker()">▶ Start Worker</button>
-<button class="btn btn-danger hidden" id="stop-btn" onclick="stopWorker()">⏹ Stop Worker</button>
-<button class="btn btn-success" onclick="refreshBalance()">🔄 Refresh Balance</button>
+<!-- Worker Status Banner -->
+<div class="worker-banner stopped" id="worker-banner">
+<span class="status-dot dot-gray"></span> Worker: Stopped
+</div>
+
+<!-- Global Controls -->
+<div class="controls">
+<button class="btn btn-primary" id="start-btn" onclick="startWorker()">▶ Start All</button>
+<button class="btn btn-danger hidden" id="stop-btn" onclick="stopWorker()">⏹ Stop All</button>
+<button class="btn btn-warning" id="restart-btn" onclick="restartWorker()">🔄 Restart All</button>
+<button class="btn btn-secondary" id="pause-all-btn" onclick="pauseAllAccounts()">⏸ Pause All</button>
+<button class="btn btn-success hidden" id="resume-all-btn" onclick="resumeAllAccounts()">▶ Resume All</button>
+<button class="btn btn-secondary" onclick="refreshBalance()">🔄 Refresh Balances</button>
 </div>
 
 <div class="panel">
 <h2>📋 Recent Activity</h2>
+<div class="table-wrap">
 <table><thead><tr><th>ID</th><th>Account</th><th>Type</th><th>Status</th><th>Reward</th><th>Time</th></tr></thead>
 <tbody id="recent-table"><tr><td colspan="6" style="text-align:center;color:var(--gray)">No activity yet</td></tr></tbody>
 </table>
+</div>
 </div>
 
 <div class="panel">
@@ -85,15 +197,15 @@ td{padding:10px;border-bottom:1px solid var(--border)}
 </div>
 </div>
 
-<!-- Accounts Tab -->
+<!-- ═══ Accounts Tab ═══ -->
 <div id="accounts-tab" class="hidden">
 <div class="panel">
 <h2>Add 2Captcha Account</h2>
-<p style="font-size:0.8rem;color:var(--gray);margin-bottom:12px">Enter your 2captcha thash (found in the worker cabinet URL: <code style="color:var(--accent)">2captcha.com/captcha_api.php?...thash=YOUR_KEY</code>)</p>
+<p style="font-size:0.78rem;color:var(--gray);margin-bottom:12px">Enter your 2captcha thash (found in the worker cabinet URL: <code style="color:var(--accent)">2captcha.com/captcha_api.php?...thash=YOUR_KEY</code>)</p>
 <input type="text" id="new-thash" placeholder="Paste thash here (32 characters)">
 <input type="text" id="new-label" placeholder="Account label (e.g. Account 1, Brian)">
 <button class="btn btn-primary" onclick="addAccount()">➕ Add Account</button>
-<div id="add-result" style="margin-top:8px;font-size:0.8rem"></div>
+<div id="add-result" style="margin-top:8px;font-size:0.78rem"></div>
 </div>
 
 <div class="panel">
@@ -102,7 +214,7 @@ td{padding:10px;border-bottom:1px solid var(--border)}
 </div>
 </div>
 
-<!-- Settings Tab -->
+<!-- ═══ Settings Tab ═══ -->
 <div id="settings-tab" class="hidden">
 <div class="panel">
 <h2>Solver Endpoints</h2>
@@ -117,83 +229,260 @@ td{padding:10px;border-bottom:1px solid var(--border)}
 </div>
 
 <script>
+// ═══ API Helper ═══
 async function api(path,method='GET',body=null){
-const opts={method,headers:{'Content-Type':'application/json'}};
-if(body)opts.body=JSON.stringify(body);
-const r=await fetch('/api/'+path,opts);
-return r.json();
+    const opts={method,headers:{'Content-Type':'application/json'}};
+    if(body)opts.body=JSON.stringify(body);
+    try{
+        const r=await fetch('/api/'+path,opts);
+        if(r.redirected){window.location.href=r.url;return null;}
+        return await r.json();
+    }catch(e){console.error('API error:',e);return null;}
 }
 
+// ═══ Tab Navigation ═══
 function showTab(t){
-['dash','accounts','settings'].forEach(x=>{document.getElementById(x+'-tab').classList.toggle('hidden',x!==t);document.getElementById('tab-'+x).classList.toggle('active',x===t);});
+['dash','accounts','settings'].forEach(x=>{
+document.getElementById(x+'-tab').classList.toggle('hidden',x!==t);
+document.getElementById('tab-'+x).classList.toggle('active',x===t);
+});
 }
 
+// ═══ Status Helpers ═══
+function statusBadge(status,paused,running){
+    if(paused) return '<span class="badge badge-orange">⏸ Paused</span>';
+    if(status==='banned') return '<span class="badge badge-red">🚫 Banned</span>';
+    if(status==='training') return '<span class="badge badge-blue">📚 Training</span>';
+    if(status==='polling') return '<span class="badge badge-green">🔄 Polling</span>';
+    if(status==='parallel') return '<span class="badge badge-yellow">⚠️ Parallel</span>';
+    if(status==='error') return '<span class="badge badge-red">❌ Error</span>';
+    if(running) return '<span class="badge badge-green">✅ Active</span>';
+    return '<span class="badge badge-gray">⚪ Idle</span>';
+}
+
+function statusDot(status,paused){
+    if(paused) return 'dot-orange';
+    if(status==='banned') return 'dot-red';
+    if(status==='polling'||status==='training') return 'dot-green';
+    if(status==='parallel'||status==='error') return 'dot-yellow';
+    return 'dot-gray';
+}
+
+// ═══ Update Worker Banner & Global Controls ═══
+function updateWorkerUI(running, accounts){
+    const banner=document.getElementById('worker-banner');
+    const startBtn=document.getElementById('start-btn');
+    const stopBtn=document.getElementById('stop-btn');
+    const restartBtn=document.getElementById('restart-btn');
+    const pauseAllBtn=document.getElementById('pause-all-btn');
+    const resumeAllBtn=document.getElementById('resume-all-btn');
+    const activeCountEl=document.getElementById('active-count');
+
+    const activeAccounts = accounts.filter(a=>a.running&&!a.paused).length;
+    const pausedAccounts = accounts.filter(a=>a.paused).length;
+    activeCountEl.textContent = activeAccounts+' active';
+
+    if(running){
+        if(pausedAccounts===accounts.length && accounts.length>0){
+            banner.className='worker-banner paused';
+            banner.innerHTML='<span class="status-dot dot-orange pulse"></span> Worker: Running (All Paused)';
+        } else if(pausedAccounts>0){
+            banner.className='worker-banner running';
+            banner.innerHTML='<span class="status-dot dot-green pulse"></span> Worker: Running ('+activeAccounts+' active, '+pausedAccounts+' paused)';
+        } else {
+            banner.className='worker-banner running';
+            banner.innerHTML='<span class="status-dot dot-green pulse"></span> Worker: Running ('+activeAccounts+' active)';
+        }
+        startBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        restartBtn.classList.remove('hidden');
+        pauseAllBtn.classList.remove('hidden');
+        resumeAllBtn.classList.add('hidden');
+    } else {
+        banner.className='worker-banner stopped';
+        banner.innerHTML='<span class="status-dot dot-gray"></span> Worker: Stopped';
+        startBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        restartBtn.classList.remove('hidden');
+        pauseAllBtn.classList.add('hidden');
+        resumeAllBtn.classList.add('hidden');
+    }
+}
+
+// ═══ Main Stats Update ═══
 async function updateStats(){
-try{
-const s=await api('stats');
-document.getElementById('earnings-today').textContent='$'+(s.earnings_today||0).toFixed(4);
-document.getElementById('solved-today').textContent=(s.solved_today||0)+' solved';
-document.getElementById('total-balance').textContent='$'+(s.total_balance||0).toFixed(4);
-document.getElementById('account-count').textContent=(s.account_count||0)+' accounts, '+(s.active_accounts||0)+' active';
-document.getElementById('total-solved').textContent=s.total_solved||0;
-const rate=s.total_solved?Math.round(s.total_solved/((s.total_solved||0)+(s.total_failed||0))*100):0;
-document.getElementById('success-rate').textContent=rate+'% success';
+    try{
+        const s=await api('stats');
+        if(!s) return;
 
-// Recent
-let html='';
-if(s.recent&&s.recent.length){
-s.recent.forEach(r=>{
-const cls=r.status==='solved'?'badge-green':'badge-red';
-html+=`<tr><td>${r.captcha_id}</td><td>${r.account_label||'-'}</td><td>${r.captcha_type}</td><td><span class="badge ${cls}">${r.status}</span></td><td>$${(r.reward||0).toFixed(5)}</td><td>${r.solve_time_ms||0}ms</td></tr>`;
-});
-}else{html='<tr><td colspan="6" style="text-align:center;color:var(--gray)">No activity yet</td></tr>';}
-document.getElementById('recent-table').innerHTML=html;
+        document.getElementById('earnings-today').textContent='$'+(s.earnings_today||0).toFixed(4);
+        document.getElementById('solved-today').textContent=(s.solved_today||0)+' solved';
+        document.getElementById('total-balance').textContent='$'+(s.total_balance||0).toFixed(4);
+        document.getElementById('account-count').textContent=(s.account_count||0)+' accounts, '+(s.active_accounts||0)+' active';
+        document.getElementById('total-solved').textContent=s.total_solved||0;
+        const rate=s.total_solved?Math.round(s.total_solved/((s.total_solved||0)+(s.total_failed||0))*100):0;
+        document.getElementById('success-rate').textContent=rate+'% success';
 
-// Accounts overview
-let ahtml='';
-if(s.accounts&&s.accounts.length){
-s.accounts.forEach(a=>{
-const st=a.running?'<span class="badge badge-green">Active</span>':'<span class="badge badge-yellow">Idle</span>';
-ahtml+=`<div class="account-row"><div class="info"><div class="name">${a.label}</div><div class="email">${a.email||a.thash.slice(0,8)+'...'}</div></div><div class="stats"><span>💰 $${a.balance.toFixed(5)}</span><span>✅ ${a.solved}</span><span>❌ ${a.failed}</span><span>$${a.earnings.toFixed(5)}</span></div><div>${st}</div></div>`;
-});
-}else{ahtml='<p style="color:var(--gray)">No accounts configured</p>';}
-document.getElementById('accounts-overview').innerHTML=ahtml;
-}catch(e){console.error(e);}
+        // Update global worker UI
+        const accounts=s.accounts||[];
+        updateWorkerUI(s.running||false, accounts);
+
+        // Recent activity
+        let html='';
+        if(s.recent&&s.recent.length){
+            s.recent.forEach(r=>{
+                const cls=r.status==='solved'?'badge-green':'badge-red';
+                html+=`<tr><td>${r.captcha_id||'-'}</td><td>${r.account_label||'-'}</td><td>${r.captcha_type||'-'}</td><td><span class="badge ${cls}">${r.status}</span></td><td>$${(r.reward||0).toFixed(5)}</td><td>${r.solve_time_ms||0}ms</td></tr>`;
+            });
+        }else{html='<tr><td colspan="6" style="text-align:center;color:var(--gray)">No activity yet</td></tr>';}
+        document.getElementById('recent-table').innerHTML=html;
+
+        // Accounts overview
+        let ahtml='';
+        if(accounts.length){
+            accounts.forEach(a=>{
+                const badge=statusBadge(a.status,a.paused,a.running);
+                const dot=statusDot(a.status,a.paused);
+                let actionBtns='';
+                if(a.running&&!a.banned){
+                    if(a.paused){
+                        actionBtns+=`<button class="btn btn-success btn-sm" onclick="resumeAccount('${a.thash}')">▶ Resume</button>`;
+                    }else{
+                        actionBtns+=`<button class="btn btn-warning btn-sm" onclick="pauseAccount('${a.thash}')">⏸ Pause</button>`;
+                    }
+                }
+                const errLine = a.last_error ? `<div style="color:var(--red);font-size:0.62rem;margin-top:2px">⚠️ ${a.last_error}</div>` : '';
+                ahtml+=`<div class="account-row">
+                    <div class="info">
+                        <div class="name">${a.label}</div>
+                        <div class="email">${a.email||a.thash.slice(0,8)+'...'}</div>
+                        <div class="status-line"><span class="status-dot ${dot}"></span>${badge}</div>
+                        ${errLine}
+                    </div>
+                    <div class="stats">
+                        <span>💰 $${(a.balance||0).toFixed(5)}</span>
+                        <span>✅ ${a.solved||0}</span>
+                        <span>❌ ${a.failed||0}</span>
+                        <span>$${(a.earnings||0).toFixed(5)}</span>
+                    </div>
+                    <div class="actions">${actionBtns}</div>
+                </div>`;
+            });
+        }else{ahtml='<p style="color:var(--gray)">No accounts configured</p>';}
+        document.getElementById('accounts-overview').innerHTML=ahtml;
+    }catch(e){console.error('Stats error:',e);}
 }
 
+// ═══ Accounts Tab Update ═══
 async function updateAccounts(){
-try{
-const r=await api('accounts');
-let html='';
-if(r.accounts&&r.accounts.length){
-r.accounts.forEach(a=>{
-const st=a.running?'<span class="badge badge-green">Active</span>':'<span class="badge badge-yellow">Idle</span>';
-html+=`<div class="account-row"><div class="info"><div class="name">${a.label}</div><div class="email">${a.email||a.thash.slice(0,8)+'...'}</div></div><div class="stats"><span>💰 $${a.balance.toFixed(5)}</span><span>✅ ${a.solved} solved</span><span>$${a.earnings.toFixed(5)} earned</span></div><div>${st}</div><div><button class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem" onclick="removeAccount('${a.thash}')">Remove</button></div></div>`;
-});
-}else{html='<p style="color:var(--gray)">No accounts yet. Add one above.</p>';}
-document.getElementById('accounts-list').innerHTML=html;
-}catch(e){console.error(e);}
+    try{
+        const r=await api('accounts');
+        if(!r) return;
+        let html='';
+        if(r.accounts&&r.accounts.length){
+            r.accounts.forEach(a=>{
+                const badge=statusBadge(a.status,a.paused,a.running);
+                let actionBtns='';
+                if(a.running&&!a.banned){
+                    if(a.paused){
+                        actionBtns+=`<button class="btn btn-success btn-sm" onclick="resumeAccount('${a.thash}')">▶ Resume</button>`;
+                    }else{
+                        actionBtns+=`<button class="btn btn-warning btn-sm" onclick="pauseAccount('${a.thash}')">⏸ Pause</button>`;
+                    }
+                }
+                actionBtns+=`<button class="btn btn-danger btn-sm" onclick="removeAccount('${a.thash}')">🗑 Remove</button>`;
+                html+=`<div class="account-row">
+                    <div class="info">
+                        <div class="name">${a.label}</div>
+                        <div class="email">${a.email||a.thash.slice(0,8)+'...'}</div>
+                        <div class="status-line">${badge}</div>
+                    </div>
+                    <div class="stats">
+                        <span>💰 $${(a.balance||0).toFixed(5)}</span>
+                        <span>✅ ${a.solved||0} solved</span>
+                        <span>$${(a.earnings||0).toFixed(5)} earned</span>
+                    </div>
+                    <div class="actions">${actionBtns}</div>
+                </div>`;
+            });
+        }else{html='<p style="color:var(--gray)">No accounts yet. Add one above.</p>';};
+        document.getElementById('accounts-list').innerHTML=html;
+    }catch(e){console.error('Accounts error:',e);}
 }
 
-async function startWorker(){await api('start','POST');document.getElementById('start-btn').classList.add('hidden');document.getElementById('stop-btn').classList.remove('hidden');}
-async function stopWorker(){await api('stop','POST');document.getElementById('stop-btn').classList.add('hidden');document.getElementById('start-btn').classList.remove('hidden');}
-async function refreshBalance(){await api('balance','GET');updateStats();}
-async function addAccount(){
-const thash=document.getElementById('new-thash').value.trim();
-const label=document.getElementById('new-label').value.trim()||'Account';
-const r=await api('accounts/add','POST',{thash,label});
-const el=document.getElementById('add-result');
-if(r.error){el.innerHTML='<span style="color:var(--red)">❌ '+r.error+'</span>';}
-else{el.innerHTML='<span style="color:var(--green)">✅ Added: '+r.account.email+' (Balance: $'+r.account.balance+')</span>';document.getElementById('new-thash').value='';document.getElementById('new-label').value='';}
-updateAccounts();updateStats();
+// ═══ Actions ═══
+async function startWorker(){
+    const r=await api('start','POST');
+    if(r&&r.status==='started'){updateStats();}
+    else if(r&&r.status==='already_running'){updateStats();}
 }
-async function removeAccount(thash){await api('accounts/remove','POST',{thash});updateAccounts();updateStats();}
-async function updateHealth(){const r=await api('solver-health');let html='<table>';for(const[n,v]of Object.entries(r)){html+=`<tr><td style="text-transform:capitalize">${n.replace('_',' ')}</td><td>${v.online?'<span class="badge badge-green">Online</span>':'<span class="badge badge-red">Offline</span>'}</td><td style="font-size:0.75rem;color:var(--gray)">${v.url}</td></tr>`;}document.getElementById('solver-health').innerHTML=html+'</table>';}
+async function stopWorker(){
+    const r=await api('stop','POST');
+    if(r){updateStats();}
+}
+async function restartWorker(){
+    const r=await api('restart','POST');
+    if(r&&r.status==='restarted'){updateStats();}
+}
+async function pauseAllAccounts(){
+    const r=await api('pause-all','POST');
+    if(r){updateStats();}
+}
+async function resumeAllAccounts(){
+    const r=await api('resume-all','POST');
+    if(r){updateStats();}
+}
+async function pauseAccount(thash){
+    const r=await api('accounts/pause','POST',{thash});
+    if(r){updateStats();updateAccounts();}
+}
+async function resumeAccount(thash){
+    const r=await api('accounts/resume','POST',{thash});
+    if(r){updateStats();updateAccounts();}
+}
+async function refreshBalance(){
+    await api('balance','GET');
+    updateStats();
+}
+async function addAccount(){
+    const thash=document.getElementById('new-thash').value.trim();
+    const label=document.getElementById('new-label').value.trim()||'Account';
+    if(!thash){alert('Please enter a thash');return;}
+    const r=await api('accounts/add','POST',{thash,label});
+    const el=document.getElementById('add-result');
+    if(r&&r.error){el.innerHTML='<span style="color:var(--red)">❌ '+r.error+'</span>';}
+    else if(r&&r.account){el.innerHTML='<span style="color:var(--green)">✅ Added: '+r.account.email+' (Balance: $'+r.account.balance+')</span>';document.getElementById('new-thash').value='';document.getElementById('new-label').value='';}
+    updateAccounts();updateStats();
+}
+async function removeAccount(thash){
+    if(!confirm('Remove this account?'))return;
+    await api('accounts/remove','POST',{thash});
+    updateAccounts();updateStats();
+}
+
+// ═══ Solver Health ═══
+async function updateHealth(){
+    const r=await api('solver-health');
+    if(!r) return;
+    let html='<div class="table-wrap"><table><thead><tr><th>Solver</th><th>Status</th><th>URL</th></tr></thead><tbody>';
+    for(const[n,v]of Object.entries(r)){
+        const name=n.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+        const status=v.online?'<span class="badge badge-green">Online</span>':'<span class="badge badge-red">Offline</span>';
+        html+=`<tr><td>${name}</td><td>${status}</td><td style="font-size:0.68rem;color:var(--gray)">${v.url}</td></tr>`;
+    }
+    html+='</tbody></table></div>';
+    document.getElementById('solver-health').innerHTML=html;
+}
+
 function logout(){window.location='/logout';}
 
-updateStats();updateAccounts();updateHealth();
-setInterval(updateStats,5000);
-setInterval(updateAccounts,10000);
+// ═══ Init & Polling ═══
+updateStats();
+updateAccounts();
+updateHealth();
+setInterval(updateStats,3000);    // Fast poll for real-time status
+setInterval(updateAccounts,8000);
+setInterval(updateHealth,30000);
 </script>
 </body>
 </html>

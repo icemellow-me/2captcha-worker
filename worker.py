@@ -76,7 +76,8 @@ class AccountInfo:
     failed: int = 0
     earnings: float = 0.0
     running: bool = False
-    status: str = "idle"  # idle, polling, training, banned, parallel, error
+    paused: bool = False
+    status: str = "idle"  # idle, polling, training, banned, parallel, error, paused
     last_captcha_id: str = ""
     last_captcha_type: str = ""
     last_solve_time_ms: int = 0
@@ -116,6 +117,58 @@ class WorkerBot:
             return True
         return False
 
+    def pause_account(self, thash: str) -> bool:
+        """Pause a specific account — its loop will sleep until resumed."""
+        if thash in self.accounts:
+            info = self.accounts[thash]
+            info.paused = True
+            if info.status not in ("banned", "error"):
+                info.status = "paused"
+            log.info(f"⏸️ Paused account: {info.label}")
+            return True
+        return False
+
+    def resume_account(self, thash: str) -> bool:
+        """Resume a paused account."""
+        if thash in self.accounts:
+            info = self.accounts[thash]
+            info.paused = False
+            if info.status == "paused":
+                info.status = "polling" if info.running else "idle"
+            log.info(f"▶️ Resumed account: {info.label}")
+            return True
+        return False
+
+    def pause_all(self):
+        """Pause all accounts."""
+        for info in self.accounts.values():
+            info.paused = True
+            if info.status not in ("banned", "error"):
+                info.status = "paused"
+        log.info(f"⏸️ Paused all {len(self.accounts)} account(s)")
+
+    def resume_all(self):
+        """Resume all accounts."""
+        for info in self.accounts.values():
+            info.paused = False
+            if info.status == "paused":
+                info.status = "polling" if info.running else "idle"
+        log.info(f"▶️ Resumed all {len(self.accounts)} account(s)")
+
+    async def restart_all(self):
+        """Stop and restart the worker with all accounts."""
+        log.info("🔄 Restarting all accounts...")
+        await self.stop()
+        await asyncio.sleep(2)
+        # Reset all account states
+        for info in self.accounts.values():
+            info.paused = False
+            info.status = "idle"
+            info.last_error = ""
+            info.running = False
+        await self.start()
+        log.info("✅ All accounts restarted")
+
     def get_accounts_summary(self) -> list:
         """Get summary of all accounts for the dashboard."""
         return [{
@@ -129,6 +182,7 @@ class WorkerBot:
             "failed": a.failed,
             "earnings": round(a.earnings, 6),
             "running": a.running,
+            "paused": a.paused,
             "status": a.status,
             "last_error": a.last_error,
             "last_captcha_id": a.last_captcha_id,
@@ -566,6 +620,17 @@ class WorkerBot:
         last_parallel_check = 0
         while self.running and not self._stop_event.is_set():
             try:
+                # ── Check if account is paused ────────────────────────
+                if info.paused:
+                    if info.status != "paused":
+                        info.status = "paused"
+                        log.info(f"⏸️ [{info.label}] Account paused — waiting for resume...")
+                    await asyncio.sleep(2)
+                    continue
+                elif info.status == "paused":
+                    info.status = "polling"
+                    log.info(f"▶️ [{info.label}] Account resumed — polling again")
+
                 captcha_data, error_code = await self._get_captcha(info)
                 
                 # ── Handle error codes ────────────────────────────────

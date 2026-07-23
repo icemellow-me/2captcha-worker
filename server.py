@@ -109,14 +109,84 @@ async def api_start(request):
     if worker_task and not worker_task.done():
         return web.json_response({"status": "already_running"})
     worker_task = asyncio.create_task(worker_bot.start())
+    await database.set_worker_state("running", "true")
     return web.json_response({"status": "started", "accounts": len(worker_bot.accounts)})
 
 
 async def api_stop(request):
+    global worker_task
     if not await auth_check(request):
         return web.json_response({"error": "unauthorized"}, status=401)
     await worker_bot.stop()
+    await database.set_worker_state("running", "false")
     return web.json_response({"status": "stopped"})
+
+
+async def api_restart(request):
+    """Restart all accounts — stop then start."""
+    global worker_task
+    if not await auth_check(request):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    if not worker_bot.accounts:
+        return web.json_response({"error": "No accounts configured"}, status=400)
+    # Stop existing worker
+    if worker_task and not worker_task.done():
+        await worker_bot.stop()
+        await asyncio.sleep(2)
+    # Reset account states
+    for info in worker_bot.accounts.values():
+        info.paused = False
+        info.status = "idle"
+        info.last_error = ""
+        info.running = False
+    # Start fresh
+    worker_task = asyncio.create_task(worker_bot.start())
+    await database.set_worker_state("running", "true")
+    return web.json_response({"status": "restarted", "accounts": len(worker_bot.accounts)})
+
+
+async def api_pause_account(request):
+    """Pause a specific account."""
+    if not await auth_check(request):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    data = await request.json()
+    thash = data.get("thash", "")
+    if worker_bot.pause_account(thash):
+        await database.set_account_paused(thash, True)
+        return web.json_response({"status": "paused", "thash": thash})
+    return web.json_response({"error": "Account not found"}, status=404)
+
+
+async def api_resume_account(request):
+    """Resume a specific account."""
+    if not await auth_check(request):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    data = await request.json()
+    thash = data.get("thash", "")
+    if worker_bot.resume_account(thash):
+        await database.set_account_paused(thash, False)
+        return web.json_response({"status": "resumed", "thash": thash})
+    return web.json_response({"error": "Account not found"}, status=404)
+
+
+async def api_pause_all(request):
+    """Pause all accounts."""
+    if not await auth_check(request):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    worker_bot.pause_all()
+    for thash in worker_bot.accounts:
+        await database.set_account_paused(thash, True)
+    return web.json_response({"status": "paused_all", "count": len(worker_bot.accounts)})
+
+
+async def api_resume_all(request):
+    """Resume all accounts."""
+    if not await auth_check(request):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    worker_bot.resume_all()
+    for thash in worker_bot.accounts:
+        await database.set_account_paused(thash, False)
+    return web.json_response({"status": "resumed_all", "count": len(worker_bot.accounts)})
 
 
 async def api_add_account(request):
@@ -224,6 +294,13 @@ async def on_startup(app):
             worker_bot.add_account(acc["thash"], acc.get("label", ""))
     log.info(f"📊 Dashboard starting on port {PORT}, password: {DASHBOARD_PASSWORD}")
     log.info(f"📋 Loaded {len(worker_bot.accounts)} account(s)")
+    
+    # Auto-start worker if it was running before (state persisted in DB)
+    was_running = await database.get_worker_state("running", "false")
+    if was_running == "true" and worker_bot.accounts:
+        log.info("🔄 Worker was running before restart — auto-starting...")
+        global worker_task
+        worker_task = asyncio.create_task(worker_bot.start())
 
 
 async def on_cleanup(app):
@@ -244,8 +321,13 @@ def create_app():
     app.router.add_get("/api/balance", api_balance)
     app.router.add_post("/api/start", api_start)
     app.router.add_post("/api/stop", api_stop)
+    app.router.add_post("/api/restart", api_restart)
     app.router.add_post("/api/accounts/add", api_add_account)
     app.router.add_post("/api/accounts/remove", api_remove_account)
+    app.router.add_post("/api/accounts/pause", api_pause_account)
+    app.router.add_post("/api/accounts/resume", api_resume_account)
+    app.router.add_post("/api/pause-all", api_pause_all)
+    app.router.add_post("/api/resume-all", api_resume_all)
     app.router.add_get("/api/accounts", api_accounts)
     app.router.add_get("/api/solver-health", api_health)
     app.router.add_post("/api/training/run", api_run_training)
