@@ -420,6 +420,9 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
         steps_completed = 0
         steps_skipped = 0
         max_steps = 50
+        last_cap_id = None
+        same_cap_retries = 0
+        MAX_SAME_CAP_RETRIES = 2  # Max wrong answers for same step before giving up
         
         for step in range(max_steps):
             # Get current step
@@ -448,6 +451,17 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
             text_inst = d.get("textinstructions", "")
             
             log.info(f"📋 Step {step+1}: cap={cap_id} coord={is_coord} skip={must_skip} hint={hint[:40]}")
+            
+            # ── Track same-captcha retries to prevent infinite loops ──
+            if cap_id != last_cap_id:
+                same_cap_retries = 0
+                last_cap_id = cap_id
+            else:
+                same_cap_retries += 1
+                if same_cap_retries >= MAX_SAME_CAP_RETRIES:
+                    log.warning(f"  Same captcha {cap_id} failed {same_cap_retries}x — stopping training to avoid ban")
+                    return {"success": False, "error": f"Cannot solve captcha {cap_id} after {same_cap_retries} attempts. Stopping to avoid ban.",
+                            "steps_completed": steps_completed, "skipped": steps_skipped}
             
             # ── Auto-skip step ──
             if must_skip:
@@ -506,10 +520,23 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
                     if status == 204:
                         steps_completed += 1
                     elif status == 422:
-                        log.warning("  Wrong answer submitted — will NOT retry (avoid ban)")
-                        steps_skipped += 1
-                await asyncio.sleep(1.5)
-                continue
+                        log.warning("  Wrong answer — skipping this step to avoid ban")
+                        # Skip this step instead of retrying with wrong answer
+                        async with session.post(f"{TRAINING_BASE}/current-step",
+                            cookies=cookies, headers=headers, json={"skip": True}
+                        ) as r3:
+                            skip_status = r3.status
+                            if skip_status == 204:
+                                steps_skipped += 1
+                                log.info("  Step skipped successfully")
+                            else:
+                                log.error(f"  Cannot skip (status {skip_status}) — will break to avoid ban loop")
+                                steps_skipped += 1
+                                # Don't continue the loop — return to avoid infinite wrong answers
+                                return {"success": False, "error": f"Cannot solve or skip step (cap={cap_id}). Stopping to avoid ban.",
+                                        "steps_completed": steps_completed, "skipped": steps_skipped}
+                        await asyncio.sleep(1.5)
+                        continue
             else:
                 # Could not solve — SKIP rather than submit wrong answer
                 log.warning("  Unsolved text captcha — skipping (to avoid ban)")
