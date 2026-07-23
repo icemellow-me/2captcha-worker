@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .env
 logs/
+auth_cookies.txt

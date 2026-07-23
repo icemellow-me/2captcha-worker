@@ -185,6 +185,23 @@ async def api_health(request):
     return web.json_response(results)
 
 
+# ─── Training API ────────────────────────────────────────────
+
+async def api_run_training(request):
+    """Trigger auto-training for the 2captcha account."""
+    if not await auth_check(request):
+        return web.json_response({"error": "unauthorized"}, status=401)
+    
+    try:
+        from training import complete_training
+        result = await complete_training()
+        return web.json_response(result)
+    except ImportError:
+        return web.json_response({"success": False, "error": "Training module not available"}, status=500)
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
+
 # ─── Dashboard HTML ──────────────────────────────────────────
 
 async def dashboard_page(request):
@@ -231,6 +248,7 @@ def create_app():
     app.router.add_post("/api/accounts/remove", api_remove_account)
     app.router.add_get("/api/accounts", api_accounts)
     app.router.add_get("/api/solver-health", api_health)
+    app.router.add_post("/api/training/run", api_run_training)
     app.router.add_static("/static", BASE_DIR / "static")
     return app
 

@@ -16,6 +16,13 @@ import os
 from typing import Optional, Dict, List
 from dataclasses import dataclass, field
 
+# Auto-training module
+try:
+    from training import complete_training, load_auth_cookies
+    TRAINING_AVAILABLE = True
+except ImportError:
+    TRAINING_AVAILABLE = False
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -178,8 +185,18 @@ class WorkerBot:
             log.error(f"❌ Login error [{info.label}]: {e}")
             return False
 
-    async def _get_captcha(self, info: AccountInfo) -> Optional[dict]:
-        """Fetch a captcha from the worker cabinet."""
+    async def _get_captcha(self, info: AccountInfo) -> tuple:
+        """
+        Fetch a captcha from the worker cabinet.
+        
+        Returns:
+            (captcha_data, error_code) tuple.
+            - (dict, None) = got a captcha
+            - (None, None) = no captcha available
+            - (None, "TRAINING") = training required
+            - (None, "PARALLEL") = parallel usage detected
+            - (None, "BANNED") = account banned
+        """
         try:
             async with self.session.get(
                 f"https://{CABINET_BASE}/captcha_api.php",
@@ -196,14 +213,29 @@ class WorkerBot:
                 data = await resp.json()
                 if data.get("status") == 1:
                     cap_data = data.get("data", {})
+                    info.balance = float(data.get("balance", info.balance))
+                    info.reputation = float(data.get("reputation", info.reputation))
                     if isinstance(cap_data, dict) and "captcha_id" in cap_data:
-                        info.balance = float(data.get("balance", info.balance))
-                        info.reputation = float(data.get("reputation", info.reputation))
-                        return cap_data
-                return None
+                        return cap_data, None
+                    return None, None
+                else:
+                    error_code = data.get("error_code", "")
+                    error_msg = data.get("error", "")
+                    if error_code == "ERROR_CABINET_PASS_LEVEL_TRAINING":
+                        log.warning(f"📋 [{info.label}] Training required: {error_msg[:80]}")
+                        return None, "TRAINING"
+                    elif error_code == "ERROR_PARALLEL_PROGRAM_USAGE":
+                        log.warning(f"⚠️ [{info.label}] Parallel usage detected — waiting 60s")
+                        return None, "PARALLEL"
+                    elif error_code == "ERROR_CABINET_USER_BANNED":
+                        log.error(f"🚫 [{info.label}] Account banned: {error_msg[:80]}")
+                        return None, "BANNED"
+                    else:
+                        log.debug(f"[{info.label}] getbot status -1: {error_code}")
+                        return None, None
         except Exception as e:
             log.debug(f"getbot error [{info.label}]: {e}")
-            return None
+            return None, None
 
     async def _submit_answer(self, info: AccountInfo, captcha_id: str, answer: str, confirmed: int = 1) -> dict:
         """Submit an answer to the worker cabinet."""
@@ -525,9 +557,47 @@ class WorkerBot:
         """Main polling loop for a single account."""
         info.running = True
         log.info(f"🔄 [{info.label}] Polling for captchas...")
+        training_in_progress = False
+        last_parallel_check = 0
         while self.running and not self._stop_event.is_set():
             try:
-                captcha_data = await self._get_captcha(info)
+                captcha_data, error_code = await self._get_captcha(info)
+                
+                # ── Handle error codes ────────────────────────────────
+                if error_code == "TRAINING":
+                    if not TRAINING_AVAILABLE:
+                        log.error(f"📋 [{info.label}] Training required but module not available — will retry in 60s")
+                        await asyncio.sleep(60)
+                        continue
+                    if training_in_progress:
+                        await asyncio.sleep(30)
+                        continue
+                    training_in_progress = True
+                    log.info(f"📚 [{info.label}] Starting auto-training...")
+                    result = await complete_training(self.session)
+                    training_in_progress = False
+                    if result.get("success"):
+                        log.info(f"✅ [{info.label}] Training completed! Level: {result.get('level', '?')}")
+                        # Re-login to refresh status
+                        await self._login(info)
+                    else:
+                        log.error(f"❌ [{info.label}] Training failed: {result.get('error', 'unknown')}")
+                        await asyncio.sleep(60)
+                    continue
+                
+                elif error_code == "PARALLEL":
+                    now = time.time()
+                    if now - last_parallel_check > 60:
+                        log.warning(f"⚠️ [{info.label}] Parallel usage — another session may be active. Waiting 60s...")
+                        last_parallel_check = now
+                    await asyncio.sleep(60)
+                    continue
+                
+                elif error_code == "BANNED":
+                    log.error(f"🚫 [{info.label}] Account is banned. Suspending this account's loop.")
+                    info.running = False
+                    return
+                
                 if captcha_data is None:
                     await asyncio.sleep(POLL_INTERVAL)
                     continue

@@ -1,7 +1,7 @@
 FROM python:3.13-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libffi-dev && \
+    gcc g++ libffi-dev tesseract-ocr && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -19,7 +19,10 @@ ENV CAPTCHA_KEY=ec63b74d6ee7848c14b01cc436c6eb21
 ENV SOLVER_UNIVERSAL=http://172.17.0.1:8855
 ENV SOLVER_TURNSTILE=http://172.17.0.1:8878
 ENV SOLVER_RECAPTCHA=http://172.17.0.1:8866
+ENV SOLVER_API_KEY=8010000000ccojr5nrbg516w5jvw1wu9
 ENV POLL_INTERVAL=1.0
+ENV AUTH_COOKIES_FILE=/app/auth_cookies.txt
+ENV TESSERACT_BIN=tesseract
 
 EXPOSE 8890
 
