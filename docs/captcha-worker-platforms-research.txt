@@ -1,0 +1,361 @@
+===============================================================================
+  CAPTCHA WORKER PLATFORMS — GLOBAL RESEARCH REPORT
+  Compiled: July 2026
+  Purpose: Platforms where workers EARN MONEY by solving captchas
+===============================================================================
+
+TIER 1 — SAME API AS 2CAPTCHA (INSTANTLY AUTOMATABLE)
+These use the exact same captcha_api.php worker API as 2captcha.
+Our existing worker bot can connect by changing the base URL.
+
+───────────────────────────────────────────────────────────────────────────────
+
+1. 2CAPTCHA — 2captcha.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (based Russia)
+- URL: https://2captcha.com
+- Worker Panel: https://2captcha.com/play-and-earn/play
+- API: captcha_api.php?action=getbot&thash=YOUR_KEY
+- Captcha Types: Image, reCAPTCHA v2, Turnstile, hCaptcha, xCaptcha,
+  coordinates, text
+- Pay Rate (worker): $0.40 - $1.00 / 1000 captchas
+- Payout Methods: PayPal, Bitcoin, WebMoney, Payza
+- Minimum Withdrawal: $0.50
+- Registration: Email or Google account
+- Training: Required (multiple levels, questions repeat per level)
+- Bot Status: ✅ FULLY BUILT & RUNNING
+
+───────────────────────────────────────────────────────────────────────────────
+
+2. RUCAPTCHA — rucaptcha.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (Russian-language mirror of 2captcha)
+- URL: https://rucaptcha.com
+- Worker Panel: https://rucaptcha.com/play-and-earn/play
+- API: captcha_api.php (IDENTICAL to 2captcha)
+- Captcha Types: Same as 2captcha
+- Pay Rate: Same as 2captcha (shared platform)
+- Payout Methods: Same as 2captcha
+- Minimum Withdrawal: Same as 2captcha
+- Registration: Same account as 2captcha (CONFIRMED — same thash works)
+- Training: Same as 2captcha
+- Notes: Russian-language interface but same backend
+  CONFIRMED: 2captcha thash ec63b74d... successfully logged in via RuCaptcha API
+- Bot Status: ✅ READY (just change CABINET_BASE to rucaptcha.com)
+
+───────────────────────────────────────────────────────────────────────────────
+
+3. 6CAPTCHA — 6captcha.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global
+- URL: https://6captcha.com
+- Worker Panel: /play-and-earn (same path as 2captcha)
+- API: captcha_api.php returns 302 redirect (likely 2captcha clone)
+- Captcha Types: Same as 2captcha (pending confirmation)
+- Pay Rate: Not publicly disclosed
+- Payout Methods: Unknown
+- Registration: Likely same as 2captcha
+- Notes: Very likely a 2captcha mirror/clone based on URL structure
+- Bot Status: ⚠️ NEEDS VERIFICATION (try existing thash)
+
+───────────────────────────────────────────────────────────────────────────────
+
+4. SOLVECAPTCHA — solvecaptcha.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global
+- URL: https://solvecaptcha.com
+- Worker Panel: Has log-in page + "Start earn" section
+- API: captcha_api.php returned 404 (may use different auth path)
+- Captcha Types: Likely same as 2captcha (similar UI/platform)
+- Pay Rate: ~$1.00 / 1000 captchas
+- Payout Methods: PayPal, Bitcoin
+- Minimum Withdrawal: ~$0.50
+- Registration: Email
+- Notes: Looks like 2captcha sister site but may use different API auth
+- Bot Status: ⚠️ NEEDS REVERSE ENGINEERING
+
+===============================================================================
+
+TIER 2 — HAS WORKER PANEL + API (AUTOMATABLE WITH REVERSE ENGINEERING)
+These have worker login pages and APIs but different from 2captcha.
+Would need separate reverse-engineering effort.
+
+───────────────────────────────────────────────────────────────────────────────
+
+5. ANTI-CAPTCHA — anti-captcha.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global, 20+ languages (based Russia, since 2007)
+- URL: https://anti-captcha.com
+- Worker Panel: https://anti-captcha.com/work
+- API: https://api.anti-captcha.com (JSON REST API)
+- Captcha Types (client side): Images $0.50-$0.70, reCAPTCHA v2 $0.95-$2,
+  reCAPTCHA v3 $1-$2, GeeTest $1.80, Arkose Labs $3, Turnstile $2,
+  FunCaptcha, Amazon WAF $2, Custom Tasks $2
+- Worker Pay Rate: Not disclosed publicly (estimated ~$0.30-$0.70/1000
+  — platform takes ~40-60% cut)
+- Payout Methods: Withdraw to client balance
+- Registration: Email
+- Notes: One of the oldest platforms. Has 20+ language support including
+  Hindi, Bengali, Vietnamese, Thai, Tagalog, Korean, Japanese, Chinese,
+  Arabic, Urdu, Persian
+- Bot Status: ⚠️ NEEDS REVERSE ENGINEERING (different API format)
+
+───────────────────────────────────────────────────────────────────────────────
+
+6. KOLOTIBABLO — kolotibablo.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: 200+ countries (based Latvia, since 2007)
+- URL: https://www.kolotibablo.com
+- Worker Panel: https://www.kolotibablo.com/work (accessible)
+- API: https://api.kolotibablo.com (confirmed HTTP 200)
+- Captcha Types: Image captcha, reCAPTCHA
+- Pay Rate: $1.50 - $3.00 / 1000 captchas (HIGHEST base rate)
+- Payout Methods: PayPal, Payza, Bitcoin, WebMoney
+- Minimum Withdrawal: ~$5
+- Registration: Email or Facebook
+- Notes: Rating system — higher accuracy & speed = higher pay rate.
+  Strict accuracy requirements. Global reputation since 2007.
+- Bot Status: ⚠️ NEEDS REVERSE ENGINEERING (has API, different format)
+
+───────────────────────────────────────────────────────────────────────────────
+
+7. 9KW.EU — 9kw.eu
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (German platform)
+- URL: https://www.9kw.eu
+- API: Has API + worker mode
+- Captcha Types: Text, image, rotate, mouse, multimouse
+- Pay Rate: ~10 points per captcha (points convert to EUR)
+- Payout Methods: PayPal, bank transfer
+- Registration: Email
+- Notes: German platform. Workers solve to earn credits/money.
+  Has bonus system (+1 for API, +1 for under 12 sec solve time)
+- Bot Status: ⚠️ NEEDS REVERSE ENGINEERING
+
+───────────────────────────────────────────────────────────────────────────────
+
+8. BESTCAPTCHASOLVER — bestcaptchasolver.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global
+- URL: https://bestcaptchasolver.com
+- API: Has client API (not confirmed worker API)
+- Captcha Types: Image captchas
+- Pay Rate: Not disclosed
+- Notes: Shows "Workers online" count — confirms has worker side
+- Bot Status: ⚠️ NEEDS INVESTIGATION
+
+===============================================================================
+
+TIER 3 — WORKER PANELS (NO PUBLIC API, NEEDS BROWSER AUTOMATION)
+These have web-based worker panels but no public worker API.
+Would need Selenium/Playwright browser automation.
+
+───────────────────────────────────────────────────────────────────────────────
+
+9. MEGATYPERS — megatypers.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (based India)
+- URL: https://www.megatypers.com
+- Worker Panel: https://www.megatypers.com/work (accessible)
+- API: None (web panel only)
+- Captcha Types: Text/image captcha (traditional typing)
+- Pay Rate: $0.45 - $1.50 / 1000 "TyperCredits"
+- Payout Methods: PayPal, Bitcoin, Western Union (min $100 for WU)
+- Minimum Withdrawal: $3 (PayPal)
+- Registration: Invitation code required (find on Google)
+- Notes: Locks account 30 minutes if you type too slow.
+  Can earn up to $200/month in TyperCredits.
+- Bot Status: ❌ Would need browser automation (no API)
+
+───────────────────────────────────────────────────────────────────────────────
+
+10. PROTYPERS — protypers.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (based India, sister of MegaTypers)
+- URL: https://www.protypers.com
+- Worker Panel: https://www.protypers.com/work (accessible)
+- API: None (web panel only)
+- Captcha Types: Text/image captcha
+- Pay Rate: $0.45 - $1.50 / 1000
+- Payout Methods: PayPal, Bitcoin, Western Union
+- Minimum Withdrawal: $3 (PayPal), $100 (WU)
+- Registration: Invitation code required
+- Notes: Nearly identical to MegaTypers (possibly same operator)
+- Bot Status: ❌ Would need browser automation (no API)
+
+───────────────────────────────────────────────────────────────────────────────
+
+11. CaptchaTypers — captchatypers.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (based US, since 2014)
+- URL: https://www.captchatypers.com
+- Worker Panel: Forms/Home.aspx (.NET based)
+- API: None
+- Captcha Types: Text/image captcha
+- Pay Rate: $0.80 - $1.50 / 1000
+- Payout Methods: PayPal, Payza
+- Minimum Withdrawal: $1.00
+- Registration: Facebook or Gmail account
+- Notes: Strict speed requirements.
+  Account locked 30 min if too slow.
+  Best hours: 7PM-9PM for more work.
+- Bot Status: ❌ Would need browser automation (.NET web forms)
+
+───────────────────────────────────────────────────────────────────────────────
+
+12. QLINKGROUP — qlinkgroup.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: 20+ countries (based Vietnam, since 2017)
+- URL: https://www.qlinkgroup.com
+- Worker Panel: Web based
+- API: None
+- Captcha Types: 2-word captchas (not standard 1-word)
+- Pay Rate: Not publicly disclosed
+- Payout Methods: Unknown
+- Registration: Account creation on website
+- Notes: Uses 2-word captchas instead of standard 1-word.
+  Vietnamese company.
+- Bot Status: ❌ Would need browser automation. Domain currently
+  unreachable (may be offline or geo-blocked).
+
+───────────────────────────────────────────────────────────────────────────────
+
+13. JUMPTASK — jumptask.io
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global
+- URL: https://jumptask.io
+- Worker Panel: Web platform
+- API: None (gig-based platform)
+- Captcha Types: Various (as part of microgig tasks)
+- Pay Rate: Paid per task in JMPT crypto tokens
+- Payout Methods: Crypto wallet withdrawal
+- Minimum Withdrawal: Low (crypto-based)
+- Registration: Email or crypto wallet
+- Notes: Different model — gig-based not continuous polling.
+  Captcha solving is one type of task among many.
+  Modern UI, crypto payouts.
+- Bot Status: ❌ Different architecture (gig-based, not polling)
+
+===============================================================================
+
+TIER 4 — MICROTASK PLATFORMS (INCLUDE CAPTCHA TASKS)
+Broad platforms that include captcha solving among other tasks.
+
+───────────────────────────────────────────────────────────────────────────────
+
+14. CLICKWORKER — clickworker.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global (German, since 2008)
+- URL: https://www.clickworker.com
+- Worker Panel: Web platform
+- Captcha Types: Captcha entry (among content review, app testing, etc.)
+- Pay Rate: Variable per task
+- Payout Methods: PayPal, Payoneer
+- Registration: Account + aptitude test
+- Notes: Established platform. Captcha is just one task type.
+  Need to pass tests before getting work.
+- Bot Status: ❌ Not captcha-specific
+
+───────────────────────────────────────────────────────────────────────────────
+
+15. MICROWORKERS — microworkers.com
+───────────────────────────────────────────────────────────────────────────────
+- Region: Global
+- URL: https://microworkers.com
+- Captcha Types: Captcha tasks available among other microtasks
+- Pay Rate: Per-task basis
+- Payout Methods: PayPal, Skrill, Dwolla
+- Minimum Withdrawal: ~$10
+- Notes: General microtask marketplace. Captcha solving tasks
+  appear intermittently.
+- Bot Status: ❌ Not captcha-specific
+
+───────────────────────────────────────────────────────────────────────────────
+
+PLATFORMS THAT ARE API CONSUMER-ONLY (NOT FOR WORKERS)
+These sell captcha-solving to clients but do NOT offer worker Sign-Ups:
+- CapSolver (capsolver.com) — API service, no worker panel
+- NoCaptchaAI (nocaptchaai.com) — API service, no worker panel
+- CaptchaAI (captchaai.com) — API service, no worker panel
+- DeathByCaptcha (deathbycaptcha.com) — API service, no worker panel
+- CapMonster Cloud (capmonster.cloud) — API service, no worker panel
+
+===============================================================================
+
+HAR FILE ANALYSIS — 2CAPTCHA TRAINING FLOW
+===============================================================================
+
+From the 3 existing HAR files:
+
+TRAINING API ENDPOINTS:
+- GET  /api/v1/training/v2/current-step?hostname=2captcha.com
+- POST /api/v1/training/v2/current-step (submit answer or skip)
+- GET  /api/v1/training/v2/summary (check completion status)
+
+TRAINING IMAGE URLS (STATIC — ANSWERS ARE CONSTANT):
+- /assets/worker-training/image67.png
+- /assets/worker-training/image5.png
+- /assets/worker-training/image82.png
+- /assets/worker-training/skip.jpeg
+- /assets/worker-training/level-10/captcha-05.jpg  (organized by level!)
+
+KEY FINDING: Training images use FIXED filenames organized by level
+(e.g., level-10/captcha-05.jpg). This means:
+- Same filename = same captcha image = same correct answer
+- Answers are CONSTANT, not random
+- We can build a LOOKUP TABLE: image_filename → correct_answer
+- Once we capture correct answers from the HAR, future training
+  is instant replay with zero OCR needed
+
+RESPONSE CODES:
+- 204 = Correct answer (step completed)
+- 422 = Wrong answer (Param "answer" is invalid)
+- 200 = GET returns step data including:
+  - isLevelCompleted, isTrainingCompleted
+  - mustSkip (true = auto-skip this step)
+  - hint (e.g., "Here are 4 digits that need to be written")
+  - errorHint (shown after wrong answer)
+  - data.captcha_id, data.params, data.textinstructions
+
+WORKER API (captcha_api.php):
+- action=login&thash=KEY  → Login, get balance/reputation
+- action=getbot&thash=KEY → Poll for captchas (returns captcha data or errors)
+- action=sendrecaptchabot → Submit answer (with salt = md5(prefix + captcha_id))
+- action=closerecaptchabot → Skip captcha (avoid timeout/ban)
+
+RUCAPTCHA USES SAME API:
+- https://rucaptcha.com/captcha_api.php works with same thash
+- Same account, same balance, same everything
+- Just different domain (Russian-language frontend)
+
+===============================================================================
+
+SUMMARY — AUTOMATION PRIORITY RANKING
+===============================================================================
+
+1. ✅ 2captcha.com — ALREADY AUTOMATED & RUNNING
+2. ✅ rucaptcha.com — READY (same API, change base URL)
+3. ⚠️ 6captcha.com — TRY existing thash (likely clone)
+4. ⚠️ solvecaptcha.com — Minor API differences to investigate
+5. ⚠️ anti-captcha.com — Large platform, reverse-engineer worker API
+6. ⚠️ kolotibablo.com — Best pay rate ($1.50-$3), has API
+7. ⚠️ 9kw.eu — German platform, has API, different captcha types
+8. ⚠️ bestcaptchasolver.com — Has workers, investigate
+9. ❌ megatypers.com — No API, needs browser automation
+10. ❌ protypers.com — No API, needs browser automation
+11. ❌ captchatypers.com — No API, .NET web forms
+12. ❌ qlinkgroup.com — No API, domain may be down
+13. ❌ jumptask.io — Different model (gig-based)
+14. ❌ clickworker.com — Not captcha-specific
+
+NEXT STEPS:
+1. Wait for HAR file with correct training answers → build lookup table
+2. Add RuCaptcha as a provider to existing bot (just change base URL)
+3. Try 6captcha with existing thash
+4. Reverse-engineer Anti-Captcha worker API (biggest opportunity)
+5. Reverse-engineer Kolotibablo API (best pay rate)
+6. Consider browser automation for MegaTypers/ProTypers if needed
+
+===============================================================================
+  END OF REPORT
+===============================================================================
