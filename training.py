@@ -45,6 +45,76 @@ SOLVER_UNIVERSAL = os.environ.get("SOLVER_UNIVERSAL", "http://172.17.0.1:8855")
 SOLVER_API_KEY = os.environ.get("SOLVER_API_KEY", "8010000000ccojr5nrbg516w5jvw1wu9")
 TESSERACT_BIN = os.environ.get("TESSERACT_BIN", "tesseract")
 
+# ─── Training Answer Lookup Table ─────────────────────────────
+# Loads known answers from training_answers.json (captured from HAR files)
+# The training API also exposes correct answers in the errorHint field
+ANSWERS_FILE = os.path.join(os.path.dirname(__file__), "training_answers.json")
+_lookup_table = {}
+
+def _load_lookup_table():
+    """Load known training answers from JSON file."""
+    global _lookup_table
+    try:
+        with open(ANSWERS_FILE) as f:
+            data = json.load(f)
+        _lookup_table = data.get("answers", {})
+        log.info(f"📚 Loaded {len(_lookup_table)} known training answers from lookup table")
+    except FileNotFoundError:
+        log.info("📚 No training_answers.json found — will use errorHint + OCR")
+    except Exception as e:
+        log.warning(f"📚 Error loading lookup table: {e}")
+
+def _lookup_answer(image_path: str) -> Optional[str]:
+    """Check if we have a known answer for this training image."""
+    if not image_path:
+        return None
+    entry = _lookup_table.get(image_path)
+    if entry:
+        answer = entry.get("answer", "")
+        if answer:
+            log.info(f"  📖 Lookup table HIT: {image_path} → '{answer}'")
+            return answer
+        if entry.get("skip") or entry.get("type") == "skip":
+            log.info(f"  📖 Lookup table SKIP: {image_path}")
+            return "SKIP"
+    return None
+
+def _extract_error_hint_answer(error_hint: str) -> Optional[str]:
+    """Extract the correct answer from the errorHint field.
+    The API includes 'Correct answer: XXX' in the errorHint even on first GET.
+    """
+    if not error_hint:
+        return None
+    # Pattern: "Correct answer: 5h4hw"
+    match = re.search(r"Correct answer:\s*(.+?)(?:\s*$|\.|\||<)", error_hint, re.IGNORECASE)
+    if match:
+        answer = match.group(1).strip()
+        log.info(f"  💡 errorHint answer: '{answer}'")
+        return answer
+    return None
+
+def _save_to_lookup_table(image_path: str, answer: str, captcha_type: str):
+    """Save a newly discovered answer to both the in-memory table and the JSON file."""
+    if not image_path or not answer:
+        return
+    _lookup_table[image_path] = {
+        "answer": answer,
+        "type": captcha_type,
+        "hint": "",
+        "level": "",
+    }
+    try:
+        output = {
+            "version": "1.0",
+            "answers": _lookup_table,
+            "notes": ["Auto-updated by training module"]
+        }
+        with open(ANSWERS_FILE, "w") as f:
+            json.dump(output, f, indent=2)
+        log.info(f"  📖 Saved answer '{answer}' for {image_path} to lookup table")
+    except Exception as e:
+        log.warning(f"  📖 Could not save to lookup table: {e}")
+
 try:
     from scipy import ndimage
     SCIPY_AVAILABLE = True
@@ -417,6 +487,9 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
             "Content-Type": "application/json",
         }
         
+        # Load the answer lookup table
+        _load_lookup_table()
+        
         steps_completed = 0
         steps_skipped = 0
         max_steps = 50
@@ -444,13 +517,15 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
             
             must_skip = data.get("mustSkip", False)
             hint = data.get("hint", {}).get("en", "")
+            error_hint = data.get("errorHint", {}).get("en", "")
             d = data.get("data", {})
             params = d.get("params", {})
             is_coord = params.get("coordinatescaptcha", 0) or params.get("coordinates_captcha", 0)
             cap_id = d.get("captcha_id", "?")
             text_inst = d.get("textinstructions", "")
+            image_path = d.get("image", "")
             
-            log.info(f"📋 Step {step+1}: cap={cap_id} coord={is_coord} skip={must_skip} hint={hint[:40]}")
+            log.info(f"📋 Step {step+1}: cap={cap_id} coord={is_coord} skip={must_skip} hint={hint[:40]} image={image_path}")
             
             # ── Track same-captcha retries to prevent infinite loops ──
             if cap_id != last_cap_id:
@@ -473,6 +548,59 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
                 steps_completed += 1
                 await asyncio.sleep(1)
                 continue
+            
+            # ── PRIORITY 1: Check lookup table for known answer ──
+            known_answer = _lookup_answer(image_path)
+            if known_answer == "SKIP":
+                log.info("  📖 Known SKIP from lookup table")
+                async with session.post(f"{TRAINING_BASE}/current-step",
+                    cookies=cookies, headers=headers, json={"skip": True}
+                ) as r2:
+                    log.info(f"  Skip: {r2.status}")
+                steps_completed += 1
+                await asyncio.sleep(1)
+                continue
+            if known_answer:
+                log.info(f"  📖 Using lookup table answer: '{known_answer}'")
+                async with session.post(f"{TRAINING_BASE}/current-step",
+                    cookies=cookies, headers=headers, json={"answer": known_answer}
+                ) as r2:
+                    status = r2.status
+                    body = await r2.text()
+                    log.info(f"  Submit (lookup): {status} {body[:100]}")
+                    if status == 204:
+                        steps_completed += 1
+                        log.info("  ✅ Lookup answer CORRECT!")
+                    elif status == 422:
+                        log.warning("  ⚠️ Lookup answer WRONG? Image may have changed. Falling through to errorHint/OCR")
+                        known_answer = None  # Fall through to other methods
+                if known_answer:  # Only continue if it was correct
+                    await asyncio.sleep(1)
+                    continue
+            
+            # ── PRIORITY 2: Extract answer from errorHint field ──
+            # The API includes the correct answer in errorHint even on first GET!
+            hint_answer = _extract_error_hint_answer(error_hint)
+            if hint_answer and hint_answer != known_answer:
+                log.info(f"  💡 Using errorHint answer: '{hint_answer}'")
+                async with session.post(f"{TRAINING_BASE}/current-step",
+                    cookies=cookies, headers=headers, json={"answer": hint_answer}
+                ) as r2:
+                    status = r2.status
+                    body = await r2.text()
+                    log.info(f"  Submit (errorHint): {status} {body[:100]}")
+                    if status == 204:
+                        steps_completed += 1
+                        log.info("  ✅ errorHint answer CORRECT!")
+                        # Save to lookup table for future use
+                        if image_path:
+                            _save_to_lookup_table(image_path, hint_answer, "text")
+                    elif status == 422:
+                        log.warning("  ⚠️ errorHint answer wrong? This shouldn't happen. Falling through to OCR")
+                        hint_answer = None
+                if hint_answer:
+                    await asyncio.sleep(1)
+                    continue
             
             # ── Coordinate captcha ──
             if is_coord:

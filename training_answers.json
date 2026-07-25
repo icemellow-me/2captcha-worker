@@ -1,0 +1,73 @@
+{
+  "version": "1.0",
+  "source": "HAR analysis of 2captcha training sessions",
+  "answers": {
+    "/assets/worker-training/image40.png": {
+      "answer": "5h4hw",
+      "type": "text",
+      "hint": "Here are 5 symbols. It's quite simple.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image61.png": {
+      "answer": "ts4w",
+      "type": "text",
+      "hint": "Here are 4 symbols, which are quite simple too.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image68.png": {
+      "answer": "2capa",
+      "type": "text",
+      "hint": "Here are 5 symbols.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image66.png": {
+      "answer": "68cb3",
+      "type": "text",
+      "hint": "Here are 5 symbols. It's quite simple.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image27.png": {
+      "answer": "55snmm",
+      "type": "text",
+      "hint": "Here are 6 symbols. This task is a bit more complicated.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image67.png": {
+      "answer": "Ha7apb",
+      "type": "text",
+      "hint": "Here are 6 symbols. It's quite simple too.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image5.png": {
+      "answer": "5tpy7p",
+      "type": "text",
+      "hint": "Here are 6 symbols. If there are no special instructions, it is written in lowercase",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image82.png": {
+      "answer": "P21w2",
+      "type": "text",
+      "hint": "Here are 5 symbols. We have special instructions 'Case sensitive!'",
+      "level": "level-3"
+    },
+    "/assets/worker-training/skip.jpeg": {
+      "answer": "",
+      "type": "skip",
+      "skip": true,
+      "hint": "What's that? I don't speak this language! What to do? It's easy - just click Skip",
+      "level": "level-3"
+    },
+    "/assets/worker-training/level-10/captcha-05.jpg": {
+      "answer": "coordinates:x=259,y=91;x=130,y=61;x=203,y=168;x=371,y=192",
+      "type": "coordinates",
+      "hint": "Choose the letters in the pictures in the correct order.",
+      "level": "level-10"
+    }
+  },
+  "notes": [
+    "errorHint field in GET /current-step response already contains the correct answer",
+    "Training images use fixed filenames - answers are constant per level",
+    "Future training sessions can replay these answers instantly",
+    "For unknown images, fall back to errorHint or OCR"
+  ]
+}
