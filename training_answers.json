@@ -159,6 +159,30 @@
       "type": "text",
       "hint": "This is a very difficult captcha. The characters are rotated and there are extra",
       "level": "level-5"
+    },
+    "/assets/worker-training/image2.png": {
+      "answer": "SIMPLE",
+      "type": "text",
+      "hint": "No instruction. Letters arranged with upward/downward shift. Find the word.",
+      "level": "level-6"
+    },
+    "/assets/worker-training/image78.png": {
+      "answer": "FIELD",
+      "type": "text",
+      "hint": "No instruction, letters arranged, find the word.",
+      "level": "level-6"
+    },
+    "/assets/worker-training/level-7/captcha-03.jpg": {
+      "answer": "TGM",
+      "type": "text",
+      "hint": "Type letters above the square, left to right.",
+      "level": "level-7"
+    },
+    "/assets/worker-training/image101.png": {
+      "answer": "984",
+      "type": "math",
+      "hint": "Enter the given numeral in digits.",
+      "level": "level-7"
     }
   },
   "notes": [
