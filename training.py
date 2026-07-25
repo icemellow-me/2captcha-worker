@@ -604,6 +604,20 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
             
             # ── Coordinate captcha ──
             if is_coord:
+                # For coordinate captchas without a known answer or errorHint, SKIP to avoid ban
+                if not known_answer and not hint_answer:
+                    log.warning("  ⚠️ Coordinate captcha with no known answer — skipping to avoid ban")
+                    async with session.post(f"{TRAINING_BASE}/current-step",
+                        cookies=cookies, headers=headers, json={"skip": True}
+                    ) as r2:
+                        log.info(f"  Skip result: {r2.status}")
+                        if r2.status == 204:
+                            steps_completed += 1
+                        else:
+                            steps_skipped += 1
+                    await asyncio.sleep(1)
+                    continue
+                    
                 answer = await _solve_coordinate_captcha(session, data)
                 if answer:
                     async with session.post(f"{TRAINING_BASE}/current-step",
@@ -635,6 +649,30 @@ async def complete_training(session: Optional[aiohttp.ClientSession] = None) -> 
                     continue
             
             # ── Text captcha (including those with instructions/images) ──
+            
+            # ── Check for math captcha — always skip if no known answer ──
+            is_math = any(kw in (hint + text_inst).lower() for kw in
+                         ["math", "calcul", "sum", "subtract", "add two", "multiply",
+                          "divid", "solve the", "equation", "arithmetic", "sequence",
+                          "mathematical", "perform the", "operation"])
+            if is_math and not known_answer and not hint_answer:
+                log.warning("  ⚠️ Math captcha detected with no known answer — skipping to avoid ban")
+                async with session.post(f"{TRAINING_BASE}/current-step",
+                    cookies=cookies, headers=headers, json={"skip": True}
+                ) as r2:
+                    skip_status = r2.status
+                    body = await r2.text()
+                    log.info(f"  Skip math: {skip_status} {body[:80]}")
+                    if skip_status == 204:
+                        steps_skipped += 1
+                    else:
+                        # If skip fails too, break to avoid ban
+                        log.error("  Cannot skip math captcha — stopping training to avoid ban")
+                        return {"success": False, "error": "Cannot solve or skip math captcha. Stopping to avoid ban.",
+                                "steps_completed": steps_completed, "skipped": steps_skipped}
+                await asyncio.sleep(1)
+                continue
+            
             answer = await _solve_text_captcha(session, data)
             
             if answer:

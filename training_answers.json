@@ -99,6 +99,36 @@
       "skip": true,
       "hint": "Be attentive, it's not English. Enter the 2 words. If you don't understand \u2014 just click Skip",
       "level": "level-3"
+    },
+    "/assets/worker-training/image95.png": {
+      "answer": "32",
+      "type": "math",
+      "hint": "addition of two numbers",
+      "level": "level-4"
+    },
+    "/assets/worker-training/calc-25.png": {
+      "answer": "25",
+      "type": "math",
+      "hint": "addition of two numbers",
+      "level": "level-4"
+    },
+    "/assets/worker-training/image47.png": {
+      "answer": "9",
+      "type": "math",
+      "hint": "add two numbers and subtract the third",
+      "level": "level-4"
+    },
+    "/assets/worker-training/image97.png": {
+      "answer": "8-4+2",
+      "type": "text",
+      "hint": "Enter symbols as shown on the picture (not math)",
+      "level": "level-4"
+    },
+    "/assets/worker-training/image70.png": {
+      "answer": "6",
+      "type": "math",
+      "hint": "mathematical sequence",
+      "level": "level-4"
     }
   },
   "notes": [
