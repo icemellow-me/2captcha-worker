@@ -67,6 +67,38 @@
       "answer": "gay5lz",
       "type": "text",
       "hint": "Here are 6 symbols. It's quite simple."
+    },
+    "/assets/worker-training/image80.png": {
+      "answer": "nmkhy",
+      "type": "text",
+      "hint": "Here are 5 characters that need to be written in a low case.",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image20.png": {
+      "answer": "5e678",
+      "type": "text",
+      "hint": "Note! Don't type space between symbols!",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image98.png": {
+      "answer": "nat4iuu",
+      "type": "text",
+      "hint": "Here are 7 symbols, not case sensitive. Be attentive: distinguish the letter L",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image24.jpg": {
+      "answer": "",
+      "type": "skip",
+      "skip": true,
+      "hint": "Be attentive, it's not English. Enter the 5 characters. If you don't understand \u2014 just click Skip",
+      "level": "level-3"
+    },
+    "/assets/worker-training/image29.jpg": {
+      "answer": "",
+      "type": "skip",
+      "skip": true,
+      "hint": "Be attentive, it's not English. Enter the 2 words. If you don't understand \u2014 just click Skip",
+      "level": "level-3"
     }
   },
   "notes": [
