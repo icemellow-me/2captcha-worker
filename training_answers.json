@@ -129,6 +129,36 @@
       "type": "math",
       "hint": "mathematical sequence",
       "level": "level-4"
+    },
+    "/assets/worker-training/image94.png": {
+      "answer": "7ycntt",
+      "type": "text",
+      "hint": "Here are 6 symbols. Be attentive: that need to be written in a low case.",
+      "level": "level-5"
+    },
+    "/assets/worker-training/image46.png": {
+      "answer": "jqa3lg",
+      "type": "text",
+      "hint": "Here are 6 symbols and no instructions about the case.",
+      "level": "level-5"
+    },
+    "/assets/worker-training/image73.png": {
+      "answer": "PXAZGC",
+      "type": "text",
+      "hint": "All symbols in upper case. There is a hint.",
+      "level": "level-5"
+    },
+    "/assets/worker-training/image38.png": {
+      "answer": "smv6br",
+      "type": "text",
+      "hint": "There is no instruction about the case. The letters are arranged with an upward",
+      "level": "level-5"
+    },
+    "/assets/worker-training/image60.png": {
+      "answer": "jfkf3w3h49cg",
+      "type": "text",
+      "hint": "This is a very difficult captcha. The characters are rotated and there are extra",
+      "level": "level-5"
     }
   },
   "notes": [
